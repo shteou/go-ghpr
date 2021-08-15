@@ -9,10 +9,10 @@ to GitHub reositories via Pull Request.
 * Shallow clone a remote repository
 * Make a commit to a new branch in the repository, and push that branch to the remote origin
 * Cleanup the repository
+* Raise a PR for a source/target branch
 
 Planned features:
 
-* Raise a PR for a source/target branch
 * Wait for the PR to become mergeable and merge it
 * Wait for a status on the merged commit
 
@@ -39,6 +39,11 @@ func PushDockerfileDeletionBranch(repoName string) error {
 	err = ghpr.PushCommit(r, branchName, func(w *git.Worktree) (string, *object.Signature, error) {
 		return DeleteDockerfileUpdater(repoName, w)
 	})
+	if err != nil {
+		return err
+	}
+
+	err = ghpr.RaisePR(r, branchName, "master", "chore: remove dockerfile for "+service, "")
 	if err != nil {
 		return err
 	}

@@ -1,15 +1,19 @@
 package ghpr
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 // UpateFunc
@@ -27,9 +31,10 @@ type Author struct {
 
 // GithubPR GitHubPR is a container for all
 type GithubPR struct {
-	Repo *git.Repository
-	Path string
-	Auth http.BasicAuth
+	RepoName string
+	Repo     *git.Repository
+	Path     string
+	Auth     http.BasicAuth
 }
 
 // Clone clones a GitHub repository to a temporary directory
@@ -51,7 +56,7 @@ func Clone(repo string, creds Credentials) (*GithubPR, error) {
 		return nil, err
 	}
 
-	return &GithubPR{Repo: r, Path: tempDir, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}, nil
+	return &GithubPR{Repo: r, RepoName: repo, Path: tempDir, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}, nil
 }
 
 // CreateCommit CreateCommit Creates a commit via the passedd UpdateFunc
@@ -100,6 +105,25 @@ func PushCommit(r *GithubPR, branchName string, fn UpdateFunc) error {
 	err = r.Repo.Push(&git.PushOptions{
 		Auth: &r.Auth,
 	})
+	return err
+}
+
+func RaisePR(r *GithubPR, sourceBranch string, targetBranch string, title string, body string) error {
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: r.Auth.Password},
+	)
+	tc := oauth2.NewClient(context.Background(), ts)
+	client := github.NewClient(tc)
+
+	_, _, err := client.PullRequests.Create(context.Background(),
+		strings.Split(r.RepoName, "/")[0],
+		strings.Split(r.RepoName, "/")[1],
+		&github.NewPullRequest{
+			Title: &title,
+			Head:  &sourceBranch,
+			Base:  &targetBranch,
+			Body:  &body})
+
 	return err
 }
 
