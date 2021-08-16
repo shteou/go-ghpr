@@ -17,20 +17,24 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// UpateFunc
+// UpdateFunc is a callback function which should create a series of changes
+// to the git WorkTree. These changes will be automatically committed on successful
+// return by the PushCommit function
 type UpdateFunc func(w *git.Worktree) (string, *object.Signature, error)
 
+// Credentials represents a GitHub username and PAT
 type Credentials struct {
 	Username string
 	Token    string
 }
 
+// Author represents information about the creator of a commit
 type Author struct {
 	Name  string
 	Email string
 }
 
-// GithubPR GitHubPR is a container for all
+// GithubPR GitHubPR is a container for all necessary state
 type GithubPR struct {
 	RepoName     string
 	Repo         *git.Repository
@@ -41,11 +45,13 @@ type GithubPR struct {
 	MergeSHA     string
 }
 
+// MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
+// and merge
 func MakeGithubPR(repoName string, creds Credentials) GithubPR {
 	return GithubPR{RepoName: repoName, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}
 }
 
-// Clone clones a GitHub repository to a temporary directory
+// Clone shallow clones a GitHub repository to a temporary directory
 func (r *GithubPR) Clone() error {
 	tempDir, err := ioutil.TempDir(".", "repo_")
 	if err != nil {
@@ -69,7 +75,8 @@ func (r *GithubPR) Clone() error {
 	return nil
 }
 
-// CreateCommit CreateCommit Creates a commit via the passedd UpdateFunc
+// PushCommit creates a commit for the Worktree changes made by the UpdateFunc parameter
+// and pushes that branch to the remote origin server
 func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 	headRef, err := r.Repo.Head()
 	if err != nil {
@@ -128,6 +135,7 @@ func (r *GithubPR) makeGitHubClient() {
 	}
 }
 
+// RaisePR creates a pull request from the sourceBranch (HEAD) to the targetBranch (base)
 func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
 	r.makeGitHubClient()
 	owner := strings.Split(r.RepoName, "/")[0]
@@ -191,6 +199,8 @@ func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 	}
 }
 
+// WaitForPR waits until the raised PR passes the supplied status check. It returns
+// an error if a failed or errored state is encountered
 func (r *GithubPR) WaitForPR(statusContext string) error {
 	r.makeGitHubClient()
 
@@ -207,6 +217,8 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 
 }
 
+// MergePR merges a PR, provided it is in a mergeable state, otherwise returning
+// an error
 func (r *GithubPR) MergePR() error {
 	r.makeGitHubClient()
 
@@ -230,6 +242,9 @@ func (r *GithubPR) MergePR() error {
 	return nil
 }
 
+// WaitForMergeCommit waits for the merge commit to receive a successful state
+// for the supplied status check. It returns an error if a failed or errored
+// state is encountered
 func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
 	r.makeGitHubClient()
 
@@ -239,6 +254,7 @@ func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
 	return r.waitForStatus(r.MergeSHA, owner, repo, statusContext)
 }
 
+// Close cleans any local files for the change
 func (r *GithubPR) Close() error {
 	return os.RemoveAll(r.Path)
 }
