@@ -10,9 +10,6 @@ to GitHub reositories via Pull Request.
 * Make a commit to a new branch in the repository, and push that branch to the remote origin
 * Cleanup the repository
 * Raise a PR for a source/target branch
-
-Planned features:
-
 * Wait for the PR to become mergeable and merge it
 * Wait for a status on the merged commit
 
