@@ -171,29 +171,39 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 			if err != nil {
 				fmt.Println("Found an error listing check runs for ref")
 				c1 <- err
+				return
 			}
 
 			if statuses != nil {
 				for i := 0; i < len(statuses); i++ {
-					if statuses[i].GetContext() == statusContext && statuses[i].GetState() == "success" {
-						break
+					context := statuses[i].GetContext()
+					state := statuses[i].GetState()
+					fmt.Println(context)
+					fmt.Println(state)
+
+					if context == statusContext {
+						if state == "success" {
+							fmt.Println("success!")
+							c1 <- nil
+							return
+						}
+						if state == "failure" || state == "error" {
+							fmt.Println("Oh boy")
+							c1 <- errors.New("target status check is in a failed state, aborting")
+							return
+						}
 					}
 				}
 			}
-			c1 <- nil
 		}
 	}()
 
 	select {
 	case err := <-c1:
-		if err != nil {
-			return err
-		}
+		return err
 	case <-time.After(60 * time.Second):
 		return errors.New("timed out waiting for PR to become mergeable")
 	}
-
-	return nil
 }
 
 func (r *GithubPR) MergePR() error {
