@@ -169,7 +169,6 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 				*pr.Head.Ref, &github.ListOptions{PerPage: 20})
 
 			if err != nil {
-				fmt.Println("Found an error listing check runs for ref")
 				c1 <- err
 				return
 			}
@@ -178,17 +177,13 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 				for i := 0; i < len(statuses); i++ {
 					context := statuses[i].GetContext()
 					state := statuses[i].GetState()
-					fmt.Println(context)
-					fmt.Println(state)
 
 					if context == statusContext {
 						if state == "success" {
-							fmt.Println("success!")
 							c1 <- nil
 							return
 						}
 						if state == "failure" || state == "error" {
-							fmt.Println("Oh boy")
 							c1 <- errors.New("target status check is in a failed state, aborting")
 							return
 						}
@@ -218,13 +213,11 @@ func (r *GithubPR) MergePR() error {
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
-		println("PR is mergeable, proceeding to merge")
 		merge, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), owner, repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
 		if err != nil {
 			return err
 		}
 		r.MergeSHA = *merge.SHA
-		fmt.Printf("Successfully merged PR, commit status is %s", r.MergeSHA)
 	} else {
 		return errors.New("PR is not mergeable")
 	}
