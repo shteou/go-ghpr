@@ -218,7 +218,7 @@ func (r *GithubPR) MergePR() error {
 
 	if pr.Mergeable != nil && *pr.Mergeable {
 		println("PR is mergeable, proceeding to merge")
-		_, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), owner, repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "squash"})
+		_, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), owner, repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
 		if err != nil {
 			return err
 		}
