@@ -149,24 +149,14 @@ func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title strin
 	return err
 }
 
-func (r *GithubPR) WaitForPR(statusContext string) error {
-	r.makeGitHubClient()
-
-	owner := strings.Split(r.RepoName, "/")[0]
-	repo := strings.Split(r.RepoName, "/")[1]
-
-	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
-	if err != nil {
-		return err
-	}
-
+func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string) error {
 	c1 := make(chan error, 1)
 	go func() {
-		println("Waiting for PR to become mergeable")
+		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
 		for {
 			time.Sleep(time.Second * 2)
 			statuses, _, err := r.GitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
-				*pr.Head.Ref, &github.ListOptions{PerPage: 20})
+				shaRef, &github.ListOptions{PerPage: 20})
 
 			if err != nil {
 				c1 <- err
@@ -196,9 +186,25 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 	select {
 	case err := <-c1:
 		return err
-	case <-time.After(60 * time.Second):
+	case <-time.After(60 * time.Minute):
 		return errors.New("timed out waiting for PR to become mergeable")
 	}
+}
+
+func (r *GithubPR) WaitForPR(statusContext string) error {
+	r.makeGitHubClient()
+
+	owner := strings.Split(r.RepoName, "/")[0]
+	repo := strings.Split(r.RepoName, "/")[1]
+
+	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
+	return r.waitForStatus(*pr.Head.SHA, owner, repo, statusContext)
+
 }
 
 func (r *GithubPR) MergePR() error {
@@ -222,6 +228,15 @@ func (r *GithubPR) MergePR() error {
 		return errors.New("PR is not mergeable")
 	}
 	return nil
+}
+
+func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
+	r.makeGitHubClient()
+
+	owner := strings.Split(r.RepoName, "/")[0]
+	repo := strings.Split(r.RepoName, "/")[1]
+
+	return r.waitForStatus(r.MergeSHA, owner, repo, statusContext)
 }
 
 func (r *GithubPR) Close() error {

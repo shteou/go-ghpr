@@ -56,7 +56,12 @@ func PushDockerfileDeletionBranch(repoName string) error {
 		return err
 	}
 
-	return change.MergePR()
+	err = change.MergePR()
+	if err != nil {
+		return err
+	}
+
+	return change.WaitForMergeCommit("Semantic Pull Request")
 }
 
 func main() {
