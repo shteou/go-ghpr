@@ -51,7 +51,8 @@ type GithubPR struct {
 }
 
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
-// and merge
+// and merge. The repository will be cloned to a temporary directory in the given filesystem. If no
+// filesystem is provided an OS backed fs will be used
 func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*GithubPR, error) {
 	if fs == nil {
 		defaultFs := osfs.New(".")
