@@ -4,15 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/osfs"
+	"github.com/go-git/go-billy/v5/util"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -37,6 +41,7 @@ type Author struct {
 // GithubPR GitHubPR is a container for all necessary state
 type GithubPR struct {
 	RepoName     string
+	Filesystem   billy.Filesystem
 	Repo         *git.Repository
 	Path         string
 	Auth         http.BasicAuth
@@ -47,27 +52,52 @@ type GithubPR struct {
 
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
 // and merge
-func MakeGithubPR(repoName string, creds Credentials) GithubPR {
-	return GithubPR{RepoName: repoName, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}
+func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*GithubPR, error) {
+	if fs == nil {
+		defaultFs := osfs.New(".")
+		fs = &defaultFs
+	}
+
+	tempDir, err := util.TempDir(*fs, ".", "repo_")
+	if err != nil {
+		return nil, err
+	}
+
+	*fs, err = (*fs).Chroot(tempDir)
+	print((*fs).Stat("."))
+	if err != nil {
+		return nil, err
+	}
+
+	return &GithubPR{
+		RepoName:   repoName,
+		Filesystem: *fs,
+		Auth:       http.BasicAuth{Username: creds.Username, Password: creds.Token},
+		Path:       tempDir,
+	}, nil
 }
 
 // Clone shallow clones a GitHub repository to a temporary directory
 func (r *GithubPR) Clone() error {
-	tempDir, err := ioutil.TempDir(".", "repo_")
-	if err != nil {
-		return err
-	}
-	r.Path = tempDir
 
 	url := fmt.Sprintf("https://github.com/" + r.RepoName)
 
-	gitRepo, err := git.PlainClone(tempDir, false, &git.CloneOptions{
-		URL:   url,
-		Depth: 1,
-		Auth:  &r.Auth,
-	})
+	storageWorkTree, err := r.Filesystem.Chroot(".git")
 	if err != nil {
-		os.RemoveAll(tempDir)
+		return err
+	}
+
+	// Create a worktree under the usual
+	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
+	gitRepo, err := git.Clone(
+		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
+		r.Filesystem,
+		&git.CloneOptions{
+			Depth: 1,
+			URL:   url,
+			Auth:  &r.Auth})
+
+	if err != nil {
 		return err
 	}
 	r.Repo = gitRepo

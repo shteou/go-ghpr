@@ -25,7 +25,7 @@ func DeleteDockerfileUpdater(repoName string, w *git.Worktree) (string, *object.
 
 func PushDockerfileDeletionBranch(repoName string) error {
 	creds := ghpr.Credentials{Username: "***", Token: "***"}
-	change := ghpr.MakeGithubPR("your/repository", creds)
+	change := ghpr.MakeGithubPR("your/repository", creds, nil)
 
 	err := change.Clone()
 	if err != nil {

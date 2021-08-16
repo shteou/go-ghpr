@@ -3,6 +3,7 @@ module github.com/shteou/go-ghpr
 go 1.16
 
 require (
+	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/go-github v17.0.0+incompatible
