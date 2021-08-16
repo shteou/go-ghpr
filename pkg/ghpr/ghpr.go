@@ -70,11 +70,17 @@ func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*Gi
 		return nil, err
 	}
 
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: creds.Token},
+	)
+	tc := oauth2.NewClient(context.Background(), ts)
+
 	return &GithubPR{
-		RepoName:   repoName,
-		Filesystem: *fs,
-		Auth:       http.BasicAuth{Username: creds.Username, Password: creds.Token},
-		Path:       tempDir,
+		RepoName:     repoName,
+		Filesystem:   *fs,
+		Auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
+		Path:         tempDir,
+		GitHubClient: github.NewClient(tc),
 	}, nil
 }
 
@@ -154,19 +160,8 @@ func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 	return err
 }
 
-func (r *GithubPR) makeGitHubClient() {
-	if r.GitHubClient == nil {
-		ts := oauth2.StaticTokenSource(
-			&oauth2.Token{AccessToken: r.Auth.Password},
-		)
-		tc := oauth2.NewClient(context.Background(), ts)
-		r.GitHubClient = github.NewClient(tc)
-	}
-}
-
 // RaisePR creates a pull request from the sourceBranch (HEAD) to the targetBranch (base)
 func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
-	r.makeGitHubClient()
 	owner := strings.Split(r.RepoName, "/")[0]
 	repo := strings.Split(r.RepoName, "/")[1]
 
@@ -231,8 +226,6 @@ func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
 func (r *GithubPR) WaitForPR(statusContext string) error {
-	r.makeGitHubClient()
-
 	owner := strings.Split(r.RepoName, "/")[0]
 	repo := strings.Split(r.RepoName, "/")[1]
 
@@ -249,8 +242,6 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 // MergePR merges a PR, provided it is in a mergeable state, otherwise returning
 // an error
 func (r *GithubPR) MergePR() error {
-	r.makeGitHubClient()
-
 	owner := strings.Split(r.RepoName, "/")[0]
 	repo := strings.Split(r.RepoName, "/")[1]
 
@@ -275,8 +266,6 @@ func (r *GithubPR) MergePR() error {
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
 func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
-	r.makeGitHubClient()
-
 	owner := strings.Split(r.RepoName, "/")[0]
 	repo := strings.Split(r.RepoName, "/")[1]
 
