@@ -40,14 +40,14 @@ type Author struct {
 
 // GithubPR GitHubPR is a container for all necessary state
 type GithubPR struct {
-	RepoName     string
-	Filesystem   billy.Filesystem
-	Repo         *git.Repository
-	Path         string
 	Auth         http.BasicAuth
-	Pr           int
+	Filesystem   billy.Filesystem
 	GitHubClient *github.Client
 	MergeSHA     string
+	Path         string
+	Pr           int
+	Repo         *git.Repository
+	RepoName     string
 }
 
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
@@ -80,7 +80,6 @@ func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*Gi
 
 // Clone shallow clones a GitHub repository to a temporary directory
 func (r *GithubPR) Clone() error {
-
 	url := fmt.Sprintf("https://github.com/" + r.RepoName)
 
 	storageWorkTree, err := r.Filesystem.Chroot(".git")
