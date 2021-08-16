@@ -50,6 +50,7 @@ func (r *GithubPR) Clone() error {
 	if err != nil {
 		return err
 	}
+	r.Path = tempDir
 
 	url := fmt.Sprintf("https://github.com/" + r.RepoName)
 
@@ -62,9 +63,7 @@ func (r *GithubPR) Clone() error {
 		os.RemoveAll(tempDir)
 		return err
 	}
-
 	r.Repo = gitRepo
-	r.Path = tempDir
 
 	return nil
 }
