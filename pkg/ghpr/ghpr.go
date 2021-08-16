@@ -87,7 +87,6 @@ func (r *GithubPR) Clone() error {
 		return err
 	}
 
-	// Create a worktree under the usual
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
 	gitRepo, err := git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
