@@ -258,3 +258,34 @@ func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
 func (r *GithubPR) Close() error {
 	return os.RemoveAll(r.Path)
 }
+
+func (r *GithubPR) Create(branchName string, targetBranch string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
+	err := r.Clone()
+	defer r.Close()
+	if err != nil {
+		return err
+	}
+
+	err = r.PushCommit(branchName, fn)
+	if err != nil {
+		return err
+	}
+
+	stuff := "test"
+	err = r.RaisePR(branchName, targetBranch, stuff, "")
+	if err != nil {
+		return err
+	}
+
+	err = r.WaitForPR(prStatusContext)
+	if err != nil {
+		return err
+	}
+
+	err = r.MergePR()
+	if err != nil {
+		return err
+	}
+
+	return r.WaitForMergeCommit(masterStatusContext)
+}

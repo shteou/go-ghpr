@@ -42,7 +42,8 @@ func PushDockerfileDeletionBranch(repoName string) error {
 		return err
 	}
 
-	err = change.RaisePR(branchName, "master", "chore: remove dockerfile for "+service, "")
+	title := fmt.Sprintf("chore: remove dockerfile for %s", service)
+	err = change.RaisePR(branchName, "master", title, """)
 	if err != nil {
 		return err
 	}
