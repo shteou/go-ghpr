@@ -2,6 +2,7 @@ package ghpr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -31,36 +32,45 @@ type Author struct {
 
 // GithubPR GitHubPR is a container for all
 type GithubPR struct {
-	RepoName string
-	Repo     *git.Repository
-	Path     string
-	Auth     http.BasicAuth
+	RepoName     string
+	Repo         *git.Repository
+	Path         string
+	Auth         http.BasicAuth
+	Pr           int
+	GitHubClient *github.Client
+}
+
+func MakeGithubPR(repoName string, creds Credentials) GithubPR {
+	return GithubPR{RepoName: repoName, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}
 }
 
 // Clone clones a GitHub repository to a temporary directory
-func Clone(repo string, creds Credentials) (*GithubPR, error) {
+func (r *GithubPR) Clone() error {
 	tempDir, err := ioutil.TempDir(".", "repo_")
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	url := fmt.Sprintf("https://github.com/" + repo)
+	url := fmt.Sprintf("https://github.com/" + r.RepoName)
 
-	r, err := git.PlainClone(tempDir, false, &git.CloneOptions{
+	gitRepo, err := git.PlainClone(tempDir, false, &git.CloneOptions{
 		URL:   url,
 		Depth: 1,
-		Auth:  &http.BasicAuth{Username: creds.Username, Password: creds.Token},
+		Auth:  &r.Auth,
 	})
 	if err != nil {
 		os.RemoveAll(tempDir)
-		return nil, err
+		return err
 	}
 
-	return &GithubPR{Repo: r, RepoName: repo, Path: tempDir, Auth: http.BasicAuth{Username: creds.Username, Password: creds.Token}}, nil
+	r.Repo = gitRepo
+	r.Path = tempDir
+
+	return nil
 }
 
 // CreateCommit CreateCommit Creates a commit via the passedd UpdateFunc
-func PushCommit(r *GithubPR, branchName string, fn UpdateFunc) error {
+func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 	headRef, err := r.Repo.Head()
 	if err != nil {
 		return err
@@ -108,25 +118,108 @@ func PushCommit(r *GithubPR, branchName string, fn UpdateFunc) error {
 	return err
 }
 
-func RaisePR(r *GithubPR, sourceBranch string, targetBranch string, title string, body string) error {
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: r.Auth.Password},
-	)
-	tc := oauth2.NewClient(context.Background(), ts)
-	client := github.NewClient(tc)
+func (r *GithubPR) makeGitHubClient() {
+	if r.GitHubClient == nil {
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: r.Auth.Password},
+		)
+		tc := oauth2.NewClient(context.Background(), ts)
+		r.GitHubClient = github.NewClient(tc)
+	}
+}
 
-	_, _, err := client.PullRequests.Create(context.Background(),
-		strings.Split(r.RepoName, "/")[0],
-		strings.Split(r.RepoName, "/")[1],
+func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
+	r.makeGitHubClient()
+	owner := strings.Split(r.RepoName, "/")[0]
+	repo := strings.Split(r.RepoName, "/")[1]
+
+	pr, _, err := r.GitHubClient.PullRequests.Create(context.Background(),
+		owner, repo,
 		&github.NewPullRequest{
 			Title: &title,
 			Head:  &sourceBranch,
 			Base:  &targetBranch,
 			Body:  &body})
+	if err != nil {
+		return err
+	}
+
+	r.Pr = *pr.Number
 
 	return err
 }
 
-func Close(r *GithubPR) error {
+func (r *GithubPR) WaitForPR(statusContext string) error {
+	r.makeGitHubClient()
+
+	owner := strings.Split(r.RepoName, "/")[0]
+	repo := strings.Split(r.RepoName, "/")[1]
+
+	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
+	if err != nil {
+		return err
+	}
+
+	c1 := make(chan error, 1)
+	go func() {
+		println("Waiting for PR to become mergeable")
+		for {
+			time.Sleep(time.Second * 2)
+			statuses, _, err := r.GitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
+				*pr.Head.Ref, &github.ListOptions{PerPage: 20})
+
+			if err != nil {
+				fmt.Println("Found an error listing check runs for ref")
+				c1 <- err
+			}
+
+			if statuses != nil {
+				for i := 0; i < len(statuses); i++ {
+					if statuses[i].GetContext() == statusContext && statuses[i].GetState() == "success" {
+						break
+					}
+				}
+			}
+			c1 <- nil
+		}
+	}()
+
+	select {
+	case err := <-c1:
+		if err != nil {
+			return err
+		}
+	case <-time.After(60 * time.Second):
+		return errors.New("timed out waiting for PR to become mergeable")
+	}
+
+	return nil
+}
+
+func (r *GithubPR) MergePR() error {
+	r.makeGitHubClient()
+
+	owner := strings.Split(r.RepoName, "/")[0]
+	repo := strings.Split(r.RepoName, "/")[1]
+
+	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
+	if err != nil {
+		return err
+	}
+
+	if pr.Mergeable != nil && *pr.Mergeable {
+		println("PR is mergeable, proceeding to merge")
+		_, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), owner, repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "squash", CommitTitle: "Ooh, neat"})
+		if err != nil {
+			return err
+		}
+		println("Successfully merged PR")
+	} else {
+		return errors.New("PR is not mergeable")
+	}
+	return nil
+}
+
+func (r *GithubPR) Close() error {
 	return os.RemoveAll(r.Path)
 }
