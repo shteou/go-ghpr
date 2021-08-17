@@ -25,41 +25,14 @@ func DeleteDockerfileUpdater(repoName string, w *git.Worktree) (string, *object.
 
 func PushDockerfileDeletionBranch(repoName string) error {
 	creds := ghpr.Credentials{Username: "***", Token: "***"}
-	change := ghpr.MakeGithubPR("your/repository", creds, nil)
-
-	err := change.Clone()
+	change, err := ghpr.MakeGithubPR("your/repository", creds, nil, nil)
 	if err != nil {
 		return err
 	}
 
-	defer change.Close()
-
-	branchName := fmt.Sprintf("chore-%s-%s", service, version)
-	err = change.PushCommit(branchName, func(w *git.Worktree) (string, *object.Signature, error) {
+	return change.Create("chore-make-change", "master", "Semantic Pull Request", "Semantic Pull Request", func(w *git.Worktree) (string, *object.Signature, error) {
 		return UpdateRequirements(service, version, w)
 	})
-	if err != nil {
-		return err
-	}
-
-	title := fmt.Sprintf("chore: remove dockerfile for %s", service)
-	err = change.RaisePR(branchName, "master", title, """)
-	if err != nil {
-		return err
-	}
-
-	// Wait for the PR's Semantic Pull Request status to become successful
-	err = change.WaitForPR("Semantic Pull Request")
-	if err != nil {
-		return err
-	}
-
-	err = change.MergePR()
-	if err != nil {
-		return err
-	}
-
-	return change.WaitForMergeCommit("Semantic Pull Request")
 }
 
 func main() {
