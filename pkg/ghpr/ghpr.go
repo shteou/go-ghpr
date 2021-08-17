@@ -16,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
@@ -42,6 +43,7 @@ type Author struct {
 type GithubPR struct {
 	Auth         http.BasicAuth
 	Filesystem   billy.Filesystem
+	Git          GoGit
 	GitHubClient *github.Client
 	MergeSHA     string
 	Path         string
@@ -50,13 +52,28 @@ type GithubPR struct {
 	RepoName     string
 }
 
+type GoGit interface {
+	Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error)
+}
+
+type RealGoGit struct {
+}
+
+func (r RealGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
+	return git.Clone(s, worktree, o)
+}
+
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
 // and merge. The repository will be cloned to a temporary directory in the given filesystem. If no
 // filesystem is provided an OS backed fs will be used
-func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*GithubPR, error) {
+func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogit GoGit) (*GithubPR, error) {
 	if fs == nil {
 		defaultFs := osfs.New(".")
 		fs = &defaultFs
+	}
+
+	if gogit == nil {
+		gogit = RealGoGit{}
 	}
 
 	tempDir, err := util.TempDir(*fs, ".", "repo_")
@@ -81,6 +98,7 @@ func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem) (*Gi
 		Auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
 		Path:         tempDir,
 		GitHubClient: github.NewClient(tc),
+		Git:          RealGoGit{},
 	}, nil
 }
 
