@@ -29,7 +29,39 @@ func TestMakeGithubPR(t *testing.T) {
 	assert.NotNil(t, pr.filesystem)
 	// And the instance has a GitHub client
 	assert.NotNil(t, pr.gitHubClient)
+}
 
+func TestMakeGithubPRWithInvalidRepo(t *testing.T) {
+	// When I create GithubPR instance with a missing user or repository
+	fs := memfs.New()
+	pr, err := makeGithubPR("shteou", Credentials{}, &fs, mockGoGit{})
+
+	// Then there is one error
+	assert.NotNil(t, err)
+	// And no GithubPR instance is returned
+	assert.Nil(t, pr)
+}
+
+func TestMakeGithubPRWithEmptyRepo(t *testing.T) {
+	// When I create GithubPR instance with an empty user/repository
+	fs := memfs.New()
+	pr, err := makeGithubPR("", Credentials{}, &fs, mockGoGit{})
+
+	// Then there is one error
+	assert.NotNil(t, err)
+	// And no GithubPR instance is returned
+	assert.Nil(t, pr)
+}
+
+func TestMakeGithubPRWithTooManySlashes(t *testing.T) {
+	// When I create GithubPR instance with extra slashes
+	fs := memfs.New()
+	pr, err := makeGithubPR("shteou/go-ghpr/foo", Credentials{}, &fs, mockGoGit{})
+
+	// Then there is one error
+	assert.NotNil(t, err)
+	// And no GithubPR instance is returned
+	assert.Nil(t, pr)
 }
 
 func TestClone(t *testing.T) {

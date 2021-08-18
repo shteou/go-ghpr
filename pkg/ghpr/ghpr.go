@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -77,6 +78,17 @@ func MakeGithubPR(repoName string, creds Credentials) (*GithubPR, error) {
 // makeGithubPR is an internal function for creating a GithubPR instance. It allows injecting a mock filesystem
 // and go-git implementation
 func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogit goGit) (*GithubPR, error) {
+	// A loose regex for a format of <user|org>/<repository>
+	// Match one or more non-slash characters, followed by a slash,
+	// followed by one or morer non-slash characters
+	matched, err := regexp.MatchString("^[^/]+/[^/]+$", repoName)
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return nil, errors.New("invalid repository name supplied")
+	}
+
 	owner := strings.Split(repoName, "/")[0]
 	repo := strings.Split(repoName, "/")[1]
 
