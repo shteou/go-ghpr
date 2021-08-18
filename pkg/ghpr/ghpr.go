@@ -43,7 +43,7 @@ type Author struct {
 type GithubPR struct {
 	Auth         http.BasicAuth
 	Filesystem   billy.Filesystem
-	Git          GoGit
+	Git          goGit
 	GitHubClient *github.Client
 	MergeSHA     string
 	Path         string
@@ -52,37 +52,36 @@ type GithubPR struct {
 	RepoName     string
 }
 
-type GoGit interface {
+// goGit provides an interface for to go-git methods in use by this module
+// This is interface is not exported.
+type goGit interface {
 	Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error)
 }
 
-type RealGoGit struct {
+// realGoGit is a go-git backed implementation of the GoGit interface
+type realGoGit struct {
 }
 
-func (r RealGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
+func (r realGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
 	return git.Clone(s, worktree, o)
 }
 
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
-// and merge. The repository will be cloned to a temporary directory in the given filesystem. If no
-// filesystem is provided an OS backed fs will be used
-func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogit GoGit) (*GithubPR, error) {
-	if fs == nil {
-		defaultFs := osfs.New(".")
-		fs = &defaultFs
-	}
+// and merge. The repository will be cloned to a temporary directory in the
+func MakeGithubPR(repoName string, creds Credentials) (*GithubPR, error) {
+	fs := osfs.New(".")
+	return makeGithubPR(repoName, creds, &fs, realGoGit{})
+}
 
-	if gogit == nil {
-		gogit = RealGoGit{}
-	}
-
+// makeGithubPR is an internal function for creating a GithubPR instance. It allows injecting a mock filesystem
+// and go-git implementation
+func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogit goGit) (*GithubPR, error) {
 	tempDir, err := util.TempDir(*fs, ".", "repo_")
 	if err != nil {
 		return nil, err
 	}
 
 	*fs, err = (*fs).Chroot(tempDir)
-	print((*fs).Stat("."))
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +97,7 @@ func MakeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 		Auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
 		Path:         tempDir,
 		GitHubClient: github.NewClient(tc),
-		Git:          RealGoGit{},
+		Git:          gogit,
 	}, nil
 }
 
@@ -112,7 +111,7 @@ func (r *GithubPR) Clone() error {
 	}
 
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
-	gitRepo, err := git.Clone(
+	r.Repo, err = r.Git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
 		r.Filesystem,
 		&git.CloneOptions{
@@ -123,7 +122,6 @@ func (r *GithubPR) Clone() error {
 	if err != nil {
 		return err
 	}
-	r.Repo = gitRepo
 
 	return nil
 }
