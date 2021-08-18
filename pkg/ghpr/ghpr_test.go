@@ -20,7 +20,7 @@ func (r mockGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.Clo
 func TestMakeGithubPR(t *testing.T) {
 	// When I create GithubPR instance
 	fs := memfs.New()
-	pr, err := makeGithubPR(".", Credentials{}, &fs, mockGoGit{})
+	pr, err := makeGithubPR("shteou/go-ghpr", Credentials{}, &fs, mockGoGit{})
 
 	// Then there are no errors
 	assert.Nil(t, err)
@@ -44,7 +44,7 @@ func TestClone(t *testing.T) {
 	// Then there are no errors
 	assert.Nil(t, err)
 	// And the instance has a Git repository
-	assert.NotNil(t, pr.Repo)
+	assert.NotNil(t, pr.GitRepo)
 	// And the filesystem root is a temporary directory
 	assert.Contains(t, pr.Filesystem.Root(), "/repo_")
 }

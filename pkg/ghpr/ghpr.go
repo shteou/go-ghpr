@@ -48,8 +48,9 @@ type GithubPR struct {
 	MergeSHA     string
 	Path         string
 	Pr           int
-	Repo         *git.Repository
-	RepoName     string
+	GitRepo      *git.Repository
+	owner        string
+	repo         string
 }
 
 // goGit provides an interface for to go-git methods in use by this module
@@ -76,6 +77,9 @@ func MakeGithubPR(repoName string, creds Credentials) (*GithubPR, error) {
 // makeGithubPR is an internal function for creating a GithubPR instance. It allows injecting a mock filesystem
 // and go-git implementation
 func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogit goGit) (*GithubPR, error) {
+	owner := strings.Split(repoName, "/")[0]
+	repo := strings.Split(repoName, "/")[1]
+
 	tempDir, err := util.TempDir(*fs, ".", "repo_")
 	if err != nil {
 		return nil, err
@@ -92,18 +96,19 @@ func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 	tc := oauth2.NewClient(context.Background(), ts)
 
 	return &GithubPR{
-		RepoName:     repoName,
 		Filesystem:   *fs,
 		Auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
 		Path:         tempDir,
 		GitHubClient: github.NewClient(tc),
 		Git:          gogit,
+		repo:         repo,
+		owner:        owner,
 	}, nil
 }
 
 // Clone shallow clones the GitHub repository
 func (r *GithubPR) Clone() error {
-	url := fmt.Sprintf("https://github.com/" + r.RepoName)
+	url := fmt.Sprintf("https://github.com/" + r.owner + "/" + r.repo)
 
 	storageWorkTree, err := r.Filesystem.Chroot(".git")
 	if err != nil {
@@ -111,7 +116,7 @@ func (r *GithubPR) Clone() error {
 	}
 
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
-	r.Repo, err = r.Git.Clone(
+	r.GitRepo, err = r.Git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
 		r.Filesystem,
 		&git.CloneOptions{
@@ -129,19 +134,19 @@ func (r *GithubPR) Clone() error {
 // PushCommit creates a commit for the Worktree changes made by the UpdateFunc parameter
 // and pushes that branch to the remote origin server
 func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
-	headRef, err := r.Repo.Head()
+	headRef, err := r.GitRepo.Head()
 	if err != nil {
 		return err
 	}
 
 	branchRef := fmt.Sprintf("refs/heads/%s", branchName)
 	ref := plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = r.Repo.Storer.SetReference(ref)
+	err = r.GitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	w, err := r.Repo.Worktree()
+	w, err := r.GitRepo.Worktree()
 	if err != nil {
 		return err
 	}
@@ -165,12 +170,12 @@ func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 
 	branchRef = fmt.Sprintf("refs/remotes/origin/%s", branchName)
 	ref = plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = r.Repo.Storer.SetReference(ref)
+	err = r.GitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	err = r.Repo.Push(&git.PushOptions{
+	err = r.GitRepo.Push(&git.PushOptions{
 		Auth: &r.Auth,
 	})
 	return err
@@ -178,11 +183,8 @@ func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 
 // RaisePR creates a pull request from the sourceBranch (HEAD) to the targetBranch (base)
 func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
-	owner := strings.Split(r.RepoName, "/")[0]
-	repo := strings.Split(r.RepoName, "/")[1]
-
 	pr, _, err := r.GitHubClient.PullRequests.Create(context.Background(),
-		owner, repo,
+		r.owner, r.repo,
 		&github.NewPullRequest{
 			Title: &title,
 			Head:  &sourceBranch,
@@ -242,32 +244,26 @@ func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
 func (r *GithubPR) WaitForPR(statusContext string) error {
-	owner := strings.Split(r.RepoName, "/")[0]
-	repo := strings.Split(r.RepoName, "/")[1]
-
-	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
+	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.Pr)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
-	return r.waitForStatus(*pr.Head.SHA, owner, repo, statusContext)
+	return r.waitForStatus(*pr.Head.SHA, r.owner, r.repo, statusContext)
 
 }
 
 // MergePR merges a PR, provided it is in a mergeable state, otherwise returning
 // an error
 func (r *GithubPR) MergePR() error {
-	owner := strings.Split(r.RepoName, "/")[0]
-	repo := strings.Split(r.RepoName, "/")[1]
-
-	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), owner, repo, r.Pr)
+	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.Pr)
 	if err != nil {
 		return err
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
-		merge, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), owner, repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
+		merge, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), r.owner, r.repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
 		if err != nil {
 			return err
 		}
@@ -282,10 +278,7 @@ func (r *GithubPR) MergePR() error {
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
 func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
-	owner := strings.Split(r.RepoName, "/")[0]
-	repo := strings.Split(r.RepoName, "/")[1]
-
-	return r.waitForStatus(r.MergeSHA, owner, repo, statusContext)
+	return r.waitForStatus(r.MergeSHA, r.owner, r.repo, statusContext)
 }
 
 // Close removes the cloned repository from the filesystem
