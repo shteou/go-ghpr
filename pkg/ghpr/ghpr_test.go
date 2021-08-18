@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Testify!!
 type mockGoGit struct {
 }
 
