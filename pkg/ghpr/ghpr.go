@@ -64,7 +64,7 @@ type goGit interface {
 type realGoGit struct {
 }
 
-func (ghpr realGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
+func (g realGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
 	return git.Clone(s, worktree, o)
 }
 
@@ -119,22 +119,22 @@ func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 }
 
 // Clone shallow clones the GitHub repository
-func (ghpr *GithubPR) Clone() error {
-	url := fmt.Sprintf("https://github.com/" + ghpr.owner + "/" + ghpr.repo)
+func (g *GithubPR) Clone() error {
+	url := fmt.Sprintf("https://github.com/" + g.owner + "/" + g.repo)
 
-	storageWorkTree, err := ghpr.filesystem.Chroot(".git")
+	storageWorkTree, err := g.filesystem.Chroot(".git")
 	if err != nil {
 		return err
 	}
 
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
-	ghpr.gitRepo, err = ghpr.git.Clone(
+	g.gitRepo, err = g.git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
-		ghpr.filesystem,
+		g.filesystem,
 		&git.CloneOptions{
 			Depth: 1,
 			URL:   url,
-			Auth:  &ghpr.auth})
+			Auth:  &g.auth})
 
 	if err != nil {
 		return err
@@ -145,20 +145,20 @@ func (ghpr *GithubPR) Clone() error {
 
 // PushCommit creates a commit for the Worktree changes made by the UpdateFunc parameter
 // and pushes that branch to the remote origin server
-func (ghpr *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
-	headRef, err := ghpr.gitRepo.Head()
+func (g *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
+	headRef, err := g.gitRepo.Head()
 	if err != nil {
 		return err
 	}
 
 	branchRef := fmt.Sprintf("refs/heads/%s", branchName)
 	ref := plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = ghpr.gitRepo.Storer.SetReference(ref)
+	err = g.gitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	w, err := ghpr.gitRepo.Worktree()
+	w, err := g.gitRepo.Worktree()
 	if err != nil {
 		return err
 	}
@@ -182,21 +182,21 @@ func (ghpr *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 
 	branchRef = fmt.Sprintf("refs/remotes/origin/%s", branchName)
 	ref = plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = ghpr.gitRepo.Storer.SetReference(ref)
+	err = g.gitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	err = ghpr.gitRepo.Push(&git.PushOptions{
-		Auth: &ghpr.auth,
+	err = g.gitRepo.Push(&git.PushOptions{
+		Auth: &g.auth,
 	})
 	return err
 }
 
 // RaisePR creates a pull request from the sourceBranch (HEAD) to the targetBranch (base)
-func (ghpr *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
-	pr, _, err := ghpr.gitHubClient.PullRequests.Create(context.Background(),
-		ghpr.owner, ghpr.repo,
+func (g *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
+	pr, _, err := g.gitHubClient.PullRequests.Create(context.Background(),
+		g.owner, g.repo,
 		&github.NewPullRequest{
 			Title: &title,
 			Head:  &sourceBranch,
@@ -206,18 +206,18 @@ func (ghpr *GithubPR) RaisePR(sourceBranch string, targetBranch string, title st
 		return err
 	}
 
-	ghpr.pr = *pr.Number
+	g.pr = *pr.Number
 
 	return err
 }
 
-func (ghpr *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string) error {
+func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string) error {
 	c1 := make(chan error, 1)
 	go func() {
 		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
 		for {
 			time.Sleep(time.Second * 2)
-			statuses, _, err := ghpr.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
+			statuses, _, err := g.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
 				shaRef, &github.ListOptions{PerPage: 20})
 
 			if err != nil {
@@ -255,31 +255,31 @@ func (ghpr *GithubPR) waitForStatus(shaRef string, owner string, repo string, st
 
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
-func (ghpr *GithubPR) WaitForPR(statusContext string) error {
-	pr, _, err := ghpr.gitHubClient.PullRequests.Get(context.Background(), ghpr.owner, ghpr.repo, ghpr.pr)
+func (g *GithubPR) WaitForPR(statusContext string) error {
+	pr, _, err := g.gitHubClient.PullRequests.Get(context.Background(), g.owner, g.repo, g.pr)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
-	return ghpr.waitForStatus(*pr.Head.SHA, ghpr.owner, ghpr.repo, statusContext)
+	return g.waitForStatus(*pr.Head.SHA, g.owner, g.repo, statusContext)
 
 }
 
 // MergePR merges a PR, provided it is in a mergeable state, otherwise returning
 // an error
-func (ghpr *GithubPR) MergePR() error {
-	pr, _, err := ghpr.gitHubClient.PullRequests.Get(context.Background(), ghpr.owner, ghpr.repo, ghpr.pr)
+func (g *GithubPR) MergePR() error {
+	pr, _, err := g.gitHubClient.PullRequests.Get(context.Background(), g.owner, g.repo, g.pr)
 	if err != nil {
 		return err
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
-		merge, _, err := ghpr.gitHubClient.PullRequests.Merge(context.Background(), ghpr.owner, ghpr.repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
+		merge, _, err := g.gitHubClient.PullRequests.Merge(context.Background(), g.owner, g.repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
 		if err != nil {
 			return err
 		}
-		ghpr.mergeSHA = *merge.SHA
+		g.mergeSHA = *merge.SHA
 	} else {
 		return errors.New("PR is not mergeable")
 	}
@@ -289,42 +289,42 @@ func (ghpr *GithubPR) MergePR() error {
 // WaitForMergeCommit waits for the merge commit to receive a successful state
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
-func (ghpr *GithubPR) WaitForMergeCommit(statusContext string) error {
-	return ghpr.waitForStatus(ghpr.mergeSHA, ghpr.owner, ghpr.repo, statusContext)
+func (g *GithubPR) WaitForMergeCommit(statusContext string) error {
+	return g.waitForStatus(g.mergeSHA, g.owner, g.repo, statusContext)
 }
 
 // Close removes the cloned repository from the filesystem
-func (ghpr *GithubPR) Close() error {
-	return os.RemoveAll(ghpr.path)
+func (g *GithubPR) Close() error {
+	return os.RemoveAll(g.path)
 }
 
-func (ghpr *GithubPR) Create(branchName string, targetBranch string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
-	err := ghpr.Clone()
-	defer ghpr.Close()
+func (g *GithubPR) Create(branchName string, targetBranch string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
+	err := g.Clone()
+	defer g.Close()
 	if err != nil {
 		return err
 	}
 
-	err = ghpr.PushCommit(branchName, fn)
+	err = g.PushCommit(branchName, fn)
 	if err != nil {
 		return err
 	}
 
 	stuff := "test"
-	err = ghpr.RaisePR(branchName, targetBranch, stuff, "")
+	err = g.RaisePR(branchName, targetBranch, stuff, "")
 	if err != nil {
 		return err
 	}
 
-	err = ghpr.WaitForPR(prStatusContext)
+	err = g.WaitForPR(prStatusContext)
 	if err != nil {
 		return err
 	}
 
-	err = ghpr.MergePR()
+	err = g.MergePR()
 	if err != nil {
 		return err
 	}
 
-	return ghpr.WaitForMergeCommit(masterStatusContext)
+	return g.WaitForMergeCommit(masterStatusContext)
 }

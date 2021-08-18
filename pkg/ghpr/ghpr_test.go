@@ -13,7 +13,7 @@ import (
 type mockGoGit struct {
 }
 
-func (ghpr mockGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
+func (g mockGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
 	return &git.Repository{}, nil
 }
 
