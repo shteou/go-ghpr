@@ -67,7 +67,7 @@ func (r realGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.Clo
 }
 
 // MakeGithubPR creates a new GithubPR struct with all the necessary state to clone, commit, raise a PR
-// and merge. The repository will be cloned to a temporary directory in the
+// and merge. The repository will be cloned to a temporary directory in the current directory
 func MakeGithubPR(repoName string, creds Credentials) (*GithubPR, error) {
 	fs := osfs.New(".")
 	return makeGithubPR(repoName, creds, &fs, realGoGit{})
@@ -101,7 +101,7 @@ func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 	}, nil
 }
 
-// Clone shallow clones a GitHub repository to a temporary directory
+// Clone shallow clones the GitHub repository
 func (r *GithubPR) Clone() error {
 	url := fmt.Sprintf("https://github.com/" + r.RepoName)
 
@@ -288,7 +288,7 @@ func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
 	return r.waitForStatus(r.MergeSHA, owner, repo, statusContext)
 }
 
-// Close cleans any local files for the change
+// Close removes the cloned repository from the filesystem
 func (r *GithubPR) Close() error {
 	return os.RemoveAll(r.Path)
 }
