@@ -211,42 +211,45 @@ func (g *GithubPR) RaisePR(sourceBranch string, targetBranch string, title strin
 	return err
 }
 
-func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string) error {
-	c1 := make(chan error, 1)
-	go func() {
-		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
-		for {
-			time.Sleep(time.Second * 2)
-			statuses, _, err := g.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
-				shaRef, &github.ListOptions{PerPage: 20})
+func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string, c chan error) {
+	fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
+	for {
+		statuses, _, err := g.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
+			shaRef, &github.ListOptions{PerPage: 20})
 
-			if err != nil {
-				c1 <- err
-				return
-			}
+		if err != nil {
+			c <- err
+			return
+		}
 
-			if statuses != nil {
-				for i := 0; i < len(statuses); i++ {
-					context := statuses[i].GetContext()
-					state := statuses[i].GetState()
+		if statuses != nil {
+			for i := 0; i < len(statuses); i++ {
+				s := statuses[i]
 
-					if context == statusContext {
-						if state == "success" {
-							c1 <- nil
-							return
-						}
-						if state == "failure" || state == "error" {
-							c1 <- errors.New("target status check is in a failed state, aborting")
-							return
-						}
+				if s.GetContext() == statusContext {
+					if s.GetState() == "success" {
+						c <- nil
+						return
+					}
+					if s.GetState() == "failure" || s.GetState() == "error" {
+						c <- errors.New("target status check is in a failed state, aborting")
+						return
 					}
 				}
 			}
 		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, statusContext string) error {
+	c := make(chan error, 1)
+	go func() {
+		g.waitForStatus(shaRef, owner, repo, statusContext, c)
 	}()
 
 	select {
-	case err := <-c1:
+	case err := <-c:
 		return err
 	case <-time.After(60 * time.Minute):
 		return errors.New("timed out waiting for PR to become mergeable")
@@ -262,7 +265,7 @@ func (g *GithubPR) WaitForPR(statusContext string) error {
 	}
 
 	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
-	return g.waitForStatus(*pr.Head.SHA, g.owner, g.repo, statusContext)
+	return g.waitForStatusWithTimeout(*pr.Head.SHA, g.owner, g.repo, statusContext)
 
 }
 
@@ -290,7 +293,7 @@ func (g *GithubPR) MergePR() error {
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
 func (g *GithubPR) WaitForMergeCommit(statusContext string) error {
-	return g.waitForStatus(g.mergeSHA, g.owner, g.repo, statusContext)
+	return g.waitForStatusWithTimeout(g.mergeSHA, g.owner, g.repo, statusContext)
 }
 
 // Close removes the cloned repository from the filesystem
