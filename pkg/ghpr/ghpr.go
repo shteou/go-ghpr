@@ -41,14 +41,14 @@ type Author struct {
 
 // GithubPR GitHubPR is a container for all necessary state
 type GithubPR struct {
-	Auth         http.BasicAuth
-	Filesystem   billy.Filesystem
-	Git          goGit
-	GitHubClient *github.Client
-	MergeSHA     string
-	Path         string
-	Pr           int
-	GitRepo      *git.Repository
+	auth         http.BasicAuth
+	filesystem   billy.Filesystem
+	git          goGit
+	gitHubClient *github.Client
+	mergeSHA     string
+	path         string
+	pr           int
+	gitRepo      *git.Repository
 	owner        string
 	repo         string
 }
@@ -96,11 +96,11 @@ func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 	tc := oauth2.NewClient(context.Background(), ts)
 
 	return &GithubPR{
-		Filesystem:   *fs,
-		Auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
-		Path:         tempDir,
-		GitHubClient: github.NewClient(tc),
-		Git:          gogit,
+		filesystem:   *fs,
+		auth:         http.BasicAuth{Username: creds.Username, Password: creds.Token},
+		path:         tempDir,
+		gitHubClient: github.NewClient(tc),
+		git:          gogit,
 		repo:         repo,
 		owner:        owner,
 	}, nil
@@ -110,19 +110,19 @@ func makeGithubPR(repoName string, creds Credentials, fs *billy.Filesystem, gogi
 func (r *GithubPR) Clone() error {
 	url := fmt.Sprintf("https://github.com/" + r.owner + "/" + r.repo)
 
-	storageWorkTree, err := r.Filesystem.Chroot(".git")
+	storageWorkTree, err := r.filesystem.Chroot(".git")
 	if err != nil {
 		return err
 	}
 
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
-	r.GitRepo, err = r.Git.Clone(
+	r.gitRepo, err = r.git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
-		r.Filesystem,
+		r.filesystem,
 		&git.CloneOptions{
 			Depth: 1,
 			URL:   url,
-			Auth:  &r.Auth})
+			Auth:  &r.auth})
 
 	if err != nil {
 		return err
@@ -134,19 +134,19 @@ func (r *GithubPR) Clone() error {
 // PushCommit creates a commit for the Worktree changes made by the UpdateFunc parameter
 // and pushes that branch to the remote origin server
 func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
-	headRef, err := r.GitRepo.Head()
+	headRef, err := r.gitRepo.Head()
 	if err != nil {
 		return err
 	}
 
 	branchRef := fmt.Sprintf("refs/heads/%s", branchName)
 	ref := plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = r.GitRepo.Storer.SetReference(ref)
+	err = r.gitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	w, err := r.GitRepo.Worktree()
+	w, err := r.gitRepo.Worktree()
 	if err != nil {
 		return err
 	}
@@ -170,20 +170,20 @@ func (r *GithubPR) PushCommit(branchName string, fn UpdateFunc) error {
 
 	branchRef = fmt.Sprintf("refs/remotes/origin/%s", branchName)
 	ref = plumbing.NewHashReference(plumbing.ReferenceName(branchRef), headRef.Hash())
-	err = r.GitRepo.Storer.SetReference(ref)
+	err = r.gitRepo.Storer.SetReference(ref)
 	if err != nil {
 		return err
 	}
 
-	err = r.GitRepo.Push(&git.PushOptions{
-		Auth: &r.Auth,
+	err = r.gitRepo.Push(&git.PushOptions{
+		Auth: &r.auth,
 	})
 	return err
 }
 
 // RaisePR creates a pull request from the sourceBranch (HEAD) to the targetBranch (base)
 func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title string, body string) error {
-	pr, _, err := r.GitHubClient.PullRequests.Create(context.Background(),
+	pr, _, err := r.gitHubClient.PullRequests.Create(context.Background(),
 		r.owner, r.repo,
 		&github.NewPullRequest{
 			Title: &title,
@@ -194,7 +194,7 @@ func (r *GithubPR) RaisePR(sourceBranch string, targetBranch string, title strin
 		return err
 	}
 
-	r.Pr = *pr.Number
+	r.pr = *pr.Number
 
 	return err
 }
@@ -205,7 +205,7 @@ func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
 		for {
 			time.Sleep(time.Second * 2)
-			statuses, _, err := r.GitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
+			statuses, _, err := r.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
 				shaRef, &github.ListOptions{PerPage: 20})
 
 			if err != nil {
@@ -244,7 +244,7 @@ func (r *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
 func (r *GithubPR) WaitForPR(statusContext string) error {
-	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.Pr)
+	pr, _, err := r.gitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.pr)
 	if err != nil {
 		return err
 	}
@@ -257,17 +257,17 @@ func (r *GithubPR) WaitForPR(statusContext string) error {
 // MergePR merges a PR, provided it is in a mergeable state, otherwise returning
 // an error
 func (r *GithubPR) MergePR() error {
-	pr, _, err := r.GitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.Pr)
+	pr, _, err := r.gitHubClient.PullRequests.Get(context.Background(), r.owner, r.repo, r.pr)
 	if err != nil {
 		return err
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
-		merge, _, err := r.GitHubClient.PullRequests.Merge(context.Background(), r.owner, r.repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
+		merge, _, err := r.gitHubClient.PullRequests.Merge(context.Background(), r.owner, r.repo, *pr.Number, "", &github.PullRequestOptions{MergeMethod: "merge"})
 		if err != nil {
 			return err
 		}
-		r.MergeSHA = *merge.SHA
+		r.mergeSHA = *merge.SHA
 	} else {
 		return errors.New("PR is not mergeable")
 	}
@@ -278,12 +278,12 @@ func (r *GithubPR) MergePR() error {
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
 func (r *GithubPR) WaitForMergeCommit(statusContext string) error {
-	return r.waitForStatus(r.MergeSHA, r.owner, r.repo, statusContext)
+	return r.waitForStatus(r.mergeSHA, r.owner, r.repo, statusContext)
 }
 
 // Close removes the cloned repository from the filesystem
 func (r *GithubPR) Close() error {
-	return os.RemoveAll(r.Path)
+	return os.RemoveAll(r.path)
 }
 
 func (r *GithubPR) Create(branchName string, targetBranch string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {

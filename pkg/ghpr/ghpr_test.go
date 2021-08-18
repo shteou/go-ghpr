@@ -26,9 +26,9 @@ func TestMakeGithubPR(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, pr)
 	// And the instance has a filesystem
-	assert.NotNil(t, pr.Filesystem)
+	assert.NotNil(t, pr.filesystem)
 	// And the instance has a GitHub client
-	assert.NotNil(t, pr.GitHubClient)
+	assert.NotNil(t, pr.gitHubClient)
 
 }
 
@@ -44,7 +44,7 @@ func TestClone(t *testing.T) {
 	// Then there are no errors
 	assert.Nil(t, err)
 	// And the instance has a Git repository
-	assert.NotNil(t, pr.GitRepo)
+	assert.NotNil(t, pr.gitRepo)
 	// And the filesystem root is a temporary directory
-	assert.Contains(t, pr.Filesystem.Root(), "/repo_")
+	assert.Contains(t, pr.filesystem.Root(), "/repo_")
 }
