@@ -20,6 +20,7 @@ import (
 	"github.com/go-git/go-git/v5/storage"
 	"github.com/go-git/go-git/v5/storage/filesystem"
 	"github.com/google/go-github/github"
+	"github.com/jpillora/backoff"
 	"golang.org/x/oauth2"
 )
 
@@ -212,8 +213,15 @@ func (g *GithubPR) RaisePR(sourceBranch string, targetBranch string, title strin
 }
 
 func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string, c chan error) {
-	fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
+	b := &backoff.Backoff{
+		Min:    20 * time.Second,
+		Max:    60 * time.Second,
+		Factor: 1.02,
+		Jitter: true,
+	}
+
 	for {
+		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
 		statuses, _, err := g.gitHubClient.Repositories.ListStatuses(context.Background(), owner, repo,
 			shaRef, &github.ListOptions{PerPage: 20})
 
@@ -238,7 +246,7 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 				}
 			}
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(b.Duration())
 	}
 }
 
