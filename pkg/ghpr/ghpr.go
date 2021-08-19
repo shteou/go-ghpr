@@ -230,20 +230,19 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 			return
 		}
 
-		if statuses != nil {
-			for i := 0; i < len(statuses); i++ {
-				s := statuses[i]
+		for i := 0; i < len(statuses); i++ {
+			s := statuses[i]
+			if s.GetContext() != statusContext {
+				continue
+			}
 
-				if s.GetContext() == statusContext {
-					if s.GetState() == "success" {
-						c <- nil
-						return
-					}
-					if s.GetState() == "failure" || s.GetState() == "error" {
-						c <- errors.New("target status check is in a failed state, aborting")
-						return
-					}
-				}
+			if s.GetState() == "success" {
+				c <- nil
+				return
+			}
+			if s.GetState() == "failure" || s.GetState() == "error" {
+				c <- errors.New("target status check is in a failed state, aborting")
+				return
 			}
 		}
 		time.Sleep(b.Duration())
