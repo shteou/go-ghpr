@@ -1,7 +1,7 @@
 # go-ghpr (GitHub PRs)
 
 `go-ghpr` is a simple wrapper around Git and GitHub which helps to automate making changes
-to GitHub reositories via Pull Request.
+to GitHub repositories via Pull Request.
 
 
 ## Features
