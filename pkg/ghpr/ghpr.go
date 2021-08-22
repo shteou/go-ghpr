@@ -250,7 +250,7 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 }
 
 func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, statusContext string) error {
-	c := make(chan error, 1)
+	c := make(chan error, 10)
 	go func() {
 		g.waitForStatus(shaRef, owner, repo, statusContext, c)
 	}()
