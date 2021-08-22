@@ -308,7 +308,7 @@ func (g *GithubPR) Close() error {
 	return os.RemoveAll(g.path)
 }
 
-func (g *GithubPR) Create(branchName string, targetBranch string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
+func (g *GithubPR) Create(branchName string, targetBranch string, title string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
 	err := g.Clone()
 	defer g.Close()
 	if err != nil {
@@ -320,8 +320,7 @@ func (g *GithubPR) Create(branchName string, targetBranch string, prStatusContex
 		return err
 	}
 
-	stuff := "test"
-	err = g.RaisePR(branchName, targetBranch, stuff, "")
+	err = g.RaisePR(branchName, targetBranch, title, "")
 	if err != nil {
 		return err
 	}
