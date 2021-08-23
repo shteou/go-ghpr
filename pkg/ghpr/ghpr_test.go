@@ -94,8 +94,6 @@ func TestClone(t *testing.T) {
 	pr, err := makeGithubPR("shteou/go-ghpr", Credentials{}, &fs, mockGit)
 	assert.Nil(t, err)
 
-
-
 	// When I perform a clone
 	err = pr.Clone()
 
@@ -106,7 +104,6 @@ func TestClone(t *testing.T) {
 	// And the filesystem root is a temporary directory
 	assert.Contains(t, pr.filesystem.Root(), "/repo_")
 }
-
 
 func TestCloneFailure(t *testing.T) {
 	// Given a GithubPR instance
