@@ -21,14 +21,13 @@ import (
 )
 
 // mockGoGit is a partial mock of go-git
-// It mocks out the externally interfacing methods (e.g. clone/push)
-// but forwards the others to go-git where it can operate on the repository
+// It mocks out the externally interfacing methods (e.g. clone), but
+// forwards the others to go-git where it can operate on the repository
 // in memory
 type mockGoGit struct {
 	mock.Mock
 }
 
-// Use testify
 func (g *mockGoGit) Clone(s storage.Storer, worktree billy.Filesystem, o *git.CloneOptions) (*git.Repository, error) {
 	args := g.Called(s, worktree, o)
 
