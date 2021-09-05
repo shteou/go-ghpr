@@ -11,7 +11,7 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-billy/v5/util"
 
-	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage"
@@ -74,22 +74,6 @@ func initGitRepo() (*git.Repository, error) {
 	wt.Commit("first commit!", &git.CommitOptions{Author: &object.Signature{Name: "test", Email: "test.test"}})
 
 	return repository, nil
-}
-
-func setupMockGoGit(t *testing.T) *mockGoGit {
-	gitRepo, err := initGitRepo()
-	assert.Nil(t, err)
-
-	mockGit := new(mockGoGit)
-	mockGit.On("Clone",
-		mock.MatchedBy(func(s storage.Storer) bool { return true }),
-		mock.MatchedBy(func(c *chroot.ChrootHelper) bool { return true }),
-		mock.MatchedBy(func(c *git.CloneOptions) bool {
-			return c.URL == "https://github.com/shteou/go-ghpr"
-		}),
-	).Return(gitRepo, nil)
-
-	return mockGit
 }
 
 func TestMakeGithubPR(t *testing.T) {
