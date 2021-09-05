@@ -204,7 +204,10 @@ func mockRemoteRepository(t *testing.T) (string, *git.Repository) {
 }
 
 func TestPushCommit(t *testing.T) {
-	// Given a cloned repository
+	// Given a remote repository
+	originPath, originRepo := mockRemoteRepository(t)
+
+	// And a cloned repository referencing that remote
 	repo, err := initGitRepo()
 	assert.Nil(t, err)
 
@@ -212,9 +215,6 @@ func TestPushCommit(t *testing.T) {
 	pr, err := makeGithubPR("shteou/go-ghpr", Credentials{}, &fs, new(mockGoGit))
 	assert.Nil(t, err)
 	pr.gitRepo = repo
-
-	// And a remote repository
-	originPath, originRepo := mockRemoteRepository(t)
 
 	_, err = pr.gitRepo.CreateRemote(&config.RemoteConfig{
 		Name: "origin",
