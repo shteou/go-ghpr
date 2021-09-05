@@ -8,10 +8,21 @@ to GitHub repositories via Pull Request.
 
 * Shallow clone a remote repository
 * Make a commit to a new branch in the repository, and push that branch to the remote origin
-* Cleanup the repository
 * Raise a PR for a source/target branch
 * Wait for the PR to become mergeable and merge it
 * Wait for a status on the merged commit
+* Cleanup the repository
+
+### Planned features
+
+* A more extensible API which still abstracts some Git/GitHub plumbing  
+  The current API is very tailored to a single use case of making a single change,
+  raising a PR, and merging that PR
+* Add more strategies for waiting for on PR status  
+  e.g. waiting for classic status checks and those from GitHub actions or
+  waiting on all status checks / mergeable status
+* Support for different merge strategies (and identifying which commits to
+  wait for statuses on)
 
 ## Usage
 
