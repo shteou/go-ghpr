@@ -175,11 +175,7 @@ func TestCloneFailure(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-func commitNothing(w *git.Worktree) (string, *object.Signature, error) {
-	f, _ := w.Filesystem.Create("test_file")
-	_, _ = f.Write([]byte("My data"))
-	_ = f.Close()
-	w.Add("test_file")
+func commitSomething(w *git.Worktree) (string, *object.Signature, error) {
 	return "committed something!", &object.Signature{Name: "author", Email: "test@currencycloud.com"}, nil
 }
 
@@ -221,7 +217,7 @@ func TestPushCommit(t *testing.T) {
 	assert.Nil(t, err)
 
 	// When I make and push the commit
-	err = pr.PushCommit("my-branch", commitNothing)
+	err = pr.PushCommit("my-branch", commitSomething)
 
 	// Then there are no errors
 	assert.Nil(t, err)
