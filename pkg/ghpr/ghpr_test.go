@@ -191,6 +191,18 @@ func temporalDir() (path string, clean func()) {
 	}
 }
 
+func mockRemoteRepository(t *testing.T) (string, *git.Repository) {
+	// NOTE: The origin repository will be set when cloned. We're testing
+	// the push behaviour, so mock out a local remote
+	targetFs, clean := temporalDir()
+	defer clean()
+	originRepo, err := git.PlainInit(targetFs, true)
+	assert.Nil(t, err)
+	assert.NotNil(t, originRepo)
+
+	return targetFs, originRepo
+}
+
 func TestPushCommit(t *testing.T) {
 	// Given a cloned repository
 	repo, err := initGitRepo()
@@ -202,17 +214,11 @@ func TestPushCommit(t *testing.T) {
 	pr.gitRepo = repo
 
 	// And a remote repository
-	// NOTE: The origin repository will be set when cloned. We're testing
-	// the push behaviour, so mock out a local remote
-	targetFs, clean := temporalDir()
-	defer clean()
-	originRepo, err := git.PlainInit(targetFs, true)
-	assert.Nil(t, err)
-	assert.NotNil(t, originRepo)
+	originPath, originRepo := mockRemoteRepository(t)
 
 	_, err = pr.gitRepo.CreateRemote(&config.RemoteConfig{
 		Name: "origin",
-		URLs: []string{targetFs},
+		URLs: []string{originPath},
 	})
 	assert.Nil(t, err)
 
@@ -232,5 +238,7 @@ func TestPushCommit(t *testing.T) {
 		return nil
 	})
 
+	// Ensure the commit we just made (plus the initial commit for the repo) are pushed
+	// to the empty remote repo
 	assert.Equal(t, 2, count, "The remote repository had the wrong number of commits")
 }
