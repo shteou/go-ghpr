@@ -310,7 +310,7 @@ func (g *GithubPR) Close() error {
 
 // Create performs a full flow. It clones a repository, allows you to make a commit to a branch on
 // that repository, pushes the branch and creates a Pull Request. It then waits for the PR to become
-// mergeable, merges it and waits for the merge commit to become mergeable.
+// mergeable, merges it and waits for the merge commit to have a passed status check.
 func (g *GithubPR) Create(branchName string, targetBranch string, title string, prStatusContext string, masterStatusContext string, prTimeout time.Duration, commitTimeout time.Duration, fn UpdateFunc) error {
 	err := g.Clone()
 	defer g.Close()
