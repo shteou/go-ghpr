@@ -44,7 +44,7 @@ type Author struct {
 // GithubPullRequester provides an interface to the GithubPR implementation
 // This can be used if generating a mock object when testing code using
 // go-ghpr
-type GithubPullRequest interface {
+type GithubPullRequester interface {
 	Clone() error
 	Close() error
 	Create(branchName string, targetBranch string, title string, prWaitStrategy StatusWaitStrategy, commitWaitStrategy StatusWaitStrategy, fn UpdateFunc) error
