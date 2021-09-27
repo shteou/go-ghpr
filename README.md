@@ -41,8 +41,18 @@ func PushDockerfileDeletionBranch(repoName string) error {
 		return err
 	}
 
-	return change.Create("chore-make-change", "master", "Semantic Pull Request", "Semantic Pull Request", func(w *git.Worktree) (string, *object.Signature, error) {
-		return UpdateRequirements(service, version, w)
+	strategy := ghpr.StatusWaitStrategy{
+		MinPollTime:       time.Second * 20,
+		MaxPollTime:       time.Second * 60,
+		PollBackoffFactor: 1.05,
+		Timeout:           time.Minute * 10,
+		WaitStatusContext: "Semantic Pull Request",
+	}
+
+	return change.Create("chore-make-change",
+		"master", strategy, strategy,
+		func(w *git.Worktree) (string, *object.Signature, error) {
+			return UpdateRequirements(service, version, w)
 	})
 }
 
