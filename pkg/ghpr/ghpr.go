@@ -55,6 +55,20 @@ type GithubPR struct {
 	repo         string
 }
 
+// StatusWaitStrategy describes how to wait for a status check
+type StatusWaitStrategy struct {
+	// The initial wait time
+	MinPollTime time.Duration
+	// The max wait time when polling for a status
+	MaxPollTime time.Duration
+	// The poll time will be multiplied by this (up to max)
+	PollBackoffFactor float32
+	// The total timeout for the wait operation
+	Timeout time.Duration
+	// WaitStatusContext indicates the name of the status check to wait for
+	WaitStatusContext string
+}
+
 // goGit provides an interface for to go-git methods in use by this module
 // This is interface is not exported.
 type goGit interface {
@@ -212,11 +226,11 @@ func (g *GithubPR) RaisePR(sourceBranch string, targetBranch string, title strin
 	return err
 }
 
-func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statusContext string, c chan error) {
+func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, strategy StatusWaitStrategy, c chan error) {
 	b := &backoff.Backoff{
-		Min:    20 * time.Second,
-		Max:    60 * time.Second,
-		Factor: 1.02,
+		Min:    strategy.MinPollTime,
+		Max:    strategy.MaxPollTime,
+		Factor: float64(strategy.PollBackoffFactor),
 		Jitter: true,
 	}
 
@@ -232,7 +246,7 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 
 		for i := 0; i < len(statuses); i++ {
 			s := statuses[i]
-			if s.GetContext() != statusContext {
+			if s.GetContext() != strategy.WaitStatusContext {
 				continue
 			}
 
@@ -249,30 +263,30 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 	}
 }
 
-func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, statusContext string, timeout time.Duration) error {
+func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, strategy StatusWaitStrategy) error {
 	c := make(chan error, 10)
 	go func() {
-		g.waitForStatus(shaRef, owner, repo, statusContext, c)
+		g.waitForStatus(shaRef, owner, repo, strategy, c)
 	}()
 
 	select {
 	case err := <-c:
 		return err
-	case <-time.After(timeout):
+	case <-time.After(strategy.Timeout):
 		return errors.New("timed out waiting for PR to become mergeable")
 	}
 }
 
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
-func (g *GithubPR) WaitForPR(statusContext string, timeout time.Duration) error {
+func (g *GithubPR) WaitForPR(strategy StatusWaitStrategy) error {
 	pr, _, err := g.gitHubClient.PullRequests.Get(context.Background(), g.owner, g.repo, g.pr)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
-	return g.waitForStatusWithTimeout(*pr.Head.SHA, g.owner, g.repo, statusContext, timeout)
+	return g.waitForStatusWithTimeout(*pr.Head.SHA, g.owner, g.repo, strategy)
 
 }
 
@@ -299,8 +313,8 @@ func (g *GithubPR) MergePR() error {
 // WaitForMergeCommit waits for the merge commit to receive a successful state
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
-func (g *GithubPR) WaitForMergeCommit(statusContext string, timeout time.Duration) error {
-	return g.waitForStatusWithTimeout(g.mergeSHA, g.owner, g.repo, statusContext, timeout)
+func (g *GithubPR) WaitForMergeCommit(strategy StatusWaitStrategy) error {
+	return g.waitForStatusWithTimeout(g.mergeSHA, g.owner, g.repo, strategy)
 }
 
 // Close removes the cloned repository from the filesystem
@@ -311,7 +325,7 @@ func (g *GithubPR) Close() error {
 // Create performs a full flow. It clones a repository, allows you to make a commit to a branch on
 // that repository, pushes the branch and creates a Pull Request. It then waits for the PR to become
 // mergeable, merges it and waits for the merge commit to have a passed status check.
-func (g *GithubPR) Create(branchName string, targetBranch string, title string, prStatusContext string, masterStatusContext string, prTimeout time.Duration, commitTimeout time.Duration, fn UpdateFunc) error {
+func (g *GithubPR) Create(branchName string, targetBranch string, title string, prWaitStrategy StatusWaitStrategy, commitWaitStrategy StatusWaitStrategy, fn UpdateFunc) error {
 	err := g.Clone()
 	defer g.Close()
 	if err != nil {
@@ -328,7 +342,7 @@ func (g *GithubPR) Create(branchName string, targetBranch string, title string, 
 		return err
 	}
 
-	err = g.WaitForPR(prStatusContext, prTimeout)
+	err = g.WaitForPR(prWaitStrategy)
 	if err != nil {
 		return err
 	}
@@ -338,5 +352,5 @@ func (g *GithubPR) Create(branchName string, targetBranch string, title string, 
 		return err
 	}
 
-	return g.WaitForMergeCommit(masterStatusContext, commitTimeout)
+	return g.WaitForMergeCommit(commitWaitStrategy)
 }
