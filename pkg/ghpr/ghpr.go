@@ -41,7 +41,22 @@ type Author struct {
 	Email string
 }
 
-// GithubPR GitHubPR is a container for all necessary state
+// GithubPullRequester provides an interface to the GithubPR implementation
+// This can be used if generating a mock object when testing code using
+// go-ghpr
+type GithubPullRequest interface {
+	Clone() error
+	Close() error
+	Create(branchName string, targetBranch string, title string, prWaitStrategy StatusWaitStrategy, commitWaitStrategy StatusWaitStrategy, fn UpdateFunc) error
+	MergePR() error
+	PushCommit(branchName string, fn UpdateFunc) error
+	RaisePR(sourceBranch string, targetBranch string, title string, body string) error
+	WaitForMergeCommit(strategy StatusWaitStrategy) error
+	WaitForPR(strategy StatusWaitStrategy) error
+}
+
+// GithubPR allows the caller to manage a simple workflow for
+// making git changes and automatically merging them via PR
 type GithubPR struct {
 	auth         http.BasicAuth
 	filesystem   billy.Filesystem
@@ -55,7 +70,7 @@ type GithubPR struct {
 	repo         string
 }
 
-// StatusWaitStrategy describes how to wait for a status check
+// StatusWaitStrategy describes how to wait for a GitHub status check
 type StatusWaitStrategy struct {
 	// The initial wait time
 	MinPollTime time.Duration
