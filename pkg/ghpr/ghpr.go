@@ -249,7 +249,7 @@ func (g *GithubPR) waitForStatus(shaRef string, owner string, repo string, statu
 	}
 }
 
-func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, statusContext string) error {
+func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo string, statusContext string, timeout time.Duration) error {
 	c := make(chan error, 10)
 	go func() {
 		g.waitForStatus(shaRef, owner, repo, statusContext, c)
@@ -258,21 +258,21 @@ func (g *GithubPR) waitForStatusWithTimeout(shaRef string, owner string, repo st
 	select {
 	case err := <-c:
 		return err
-	case <-time.After(60 * time.Minute):
+	case <-time.After(timeout):
 		return errors.New("timed out waiting for PR to become mergeable")
 	}
 }
 
 // WaitForPR waits until the raised PR passes the supplied status check. It returns
 // an error if a failed or errored state is encountered
-func (g *GithubPR) WaitForPR(statusContext string) error {
+func (g *GithubPR) WaitForPR(statusContext string, timeout time.Duration) error {
 	pr, _, err := g.gitHubClient.PullRequests.Get(context.Background(), g.owner, g.repo, g.pr)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("HEAD sha is %s\n", *pr.Head.SHA)
-	return g.waitForStatusWithTimeout(*pr.Head.SHA, g.owner, g.repo, statusContext)
+	return g.waitForStatusWithTimeout(*pr.Head.SHA, g.owner, g.repo, statusContext, timeout)
 
 }
 
@@ -299,8 +299,8 @@ func (g *GithubPR) MergePR() error {
 // WaitForMergeCommit waits for the merge commit to receive a successful state
 // for the supplied status check. It returns an error if a failed or errored
 // state is encountered
-func (g *GithubPR) WaitForMergeCommit(statusContext string) error {
-	return g.waitForStatusWithTimeout(g.mergeSHA, g.owner, g.repo, statusContext)
+func (g *GithubPR) WaitForMergeCommit(statusContext string, timeout time.Duration) error {
+	return g.waitForStatusWithTimeout(g.mergeSHA, g.owner, g.repo, statusContext, timeout)
 }
 
 // Close removes the cloned repository from the filesystem
@@ -308,7 +308,10 @@ func (g *GithubPR) Close() error {
 	return os.RemoveAll(g.path)
 }
 
-func (g *GithubPR) Create(branchName string, targetBranch string, title string, prStatusContext string, masterStatusContext string, fn UpdateFunc) error {
+// Create performs a full flow. It clones a repository, allows you to make a commit to a branch on
+// that repository, pushes the branch and creates a Pull Request. It then waits for the PR to become
+// mergeable, merges it and waits for the merge commit to have a passed status check.
+func (g *GithubPR) Create(branchName string, targetBranch string, title string, prStatusContext string, masterStatusContext string, prTimeout time.Duration, commitTimeout time.Duration, fn UpdateFunc) error {
 	err := g.Clone()
 	defer g.Close()
 	if err != nil {
@@ -325,7 +328,7 @@ func (g *GithubPR) Create(branchName string, targetBranch string, title string, 
 		return err
 	}
 
-	err = g.WaitForPR(prStatusContext)
+	err = g.WaitForPR(prStatusContext, prTimeout)
 	if err != nil {
 		return err
 	}
@@ -335,5 +338,5 @@ func (g *GithubPR) Create(branchName string, targetBranch string, title string, 
 		return err
 	}
 
-	return g.WaitForMergeCommit(masterStatusContext)
+	return g.WaitForMergeCommit(masterStatusContext, commitTimeout)
 }
