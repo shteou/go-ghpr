@@ -34,9 +34,12 @@ func DeleteDockerfileUpdater(repoName string, w *git.Worktree) (string, *object.
 	return commitMessage, &object.Signature{Name: "Stewart Platt", Email: "shteou@gmail.com"}, nil
 }
 
-func PushDockerfileDeletionBranch(repoName string) error {
+func PushDockerfileDeletionBranch(owner string, name string) error {
 	creds := ghpr.Credentials{Username: "***", Token: "***"}
-	change, err := ghpr.MakeGithubPR("your/repository", creds)
+	repo := ghpr.NewRepo(owner, name)
+	defer repo.Close()
+
+	err := repo.Clone(creds)
 	if err != nil {
 		return err
 	}
@@ -49,15 +52,33 @@ func PushDockerfileDeletionBranch(repoName string) error {
 		WaitStatusContext: "Semantic Pull Request",
 	}
 
-	return change.Create("chore-make-change",
-		"master", strategy, strategy,
-		func(w *git.Worktree) (string, *object.Signature, error) {
-			return UpdateRequirements(service, version, w)
+	change := ghpr.NewChange(repo, "chore-make-change", creds, func(w *git.Worktree) (string, *object.Signature, error) {
+		return UpdateRequirements(service, version, w)
 	})
+
+	err = change.Push()
+	if err != nil {
+		return err
+	}
+
+	pr := ghpr.NewPR(change, creds)
+	pr.Create("master", "chore: make change", "")
+
+	err = pr.WaitForPRStatus(strategy)
+	if err != nil {
+		return err
+	}
+
+	err = pr.Merge("merge")
+	if err != nil {
+		return err
+	}
+
+	return pr.WaitForMergeStatus(strategy)
 }
 
 func main() {
-	err := PushDockerfileDeletionBranch("my/repository")
+	err := PushDockerfileDeletionBranch("my", "repository")
 	if err != nil {
 		println(err.Error())
 	}
