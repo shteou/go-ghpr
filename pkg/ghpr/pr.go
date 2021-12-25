@@ -57,7 +57,7 @@ func (p *PR) Create(targetBranch string, title string, body string) error {
 
 func (p *PR) URL() (string, error) {
 	if p.Number == 0 {
-		return "", errors.New("Pull Request doesn't have a valid PR number. Was PR creation successful?")
+		return "", errors.New("pull request doesn't have a valid PR number (was PR creation successful?)")
 	}
 
 	return fmt.Sprintf("https://github.com/%s/%s/pull/%d", p.change.repo.Org, p.change.repo.Name, p.Number), nil
