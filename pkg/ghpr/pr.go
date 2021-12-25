@@ -60,7 +60,7 @@ func (p *PR) URL() (string, error) {
 		return "", errors.New("Pull Request doesn't have a valid PR number. Was PR creation successful?")
 	}
 
-	return fmt.Sprintf("https://github.com/%s/%s/pulls/%d", p.change.repo.Org, p.change.repo.Name, p.Number), nil
+	return fmt.Sprintf("https://github.com/%s/%s/pull/%d", p.change.repo.Org, p.change.repo.Name, p.Number), nil
 }
 
 func (p *PR) GetGithubPR() (*github.PullRequest, error) {
