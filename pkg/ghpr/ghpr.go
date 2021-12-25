@@ -24,20 +24,6 @@ type Author struct {
 	Email string
 }
 
-// GithubPullRequester provides an interface to the GithubPR implementation
-// This can be used if generating a mock object when testing code using
-// go-ghpr
-type GithubPullRequester interface {
-	Clone() error
-	Close() error
-	Create(branchName string, targetBranch string, title string, prWaitStrategy StatusWaitStrategy, commitWaitStrategy StatusWaitStrategy, fn UpdateFunc) error
-	MergePR() error
-	PushCommit(branchName string, fn UpdateFunc) error
-	RaisePR(sourceBranch string, targetBranch string, title string, body string) error
-	WaitForMergeCommit(strategy StatusWaitStrategy) error
-	WaitForPR(strategy StatusWaitStrategy) error
-}
-
 // StatusWaitStrategy describes how to wait for a GitHub status check
 type StatusWaitStrategy struct {
 	// The initial wait time
