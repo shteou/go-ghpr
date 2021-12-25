@@ -30,5 +30,5 @@ func TestPRUrl(t *testing.T) {
 
 	url, err := pr.URL()
 	assert.Nil(t, err)
-	assert.Equal(t, "https://github.com/test/user/pulls/1", url)
+	assert.Equal(t, "https://github.com/test/user/pull/1", url)
 }
