@@ -11,6 +11,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/jpillora/backoff v1.0.0
 	github.com/kevinburke/ssh_config v1.1.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/xanzy/ssh-agent v0.3.1 // indirect

@@ -10,6 +10,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/filesystem"
+	"github.com/pkg/errors"
 )
 
 type Repo struct {
@@ -42,20 +43,19 @@ func (r *Repo) Clone(creds Credentials) error {
 
 	tempDir, err := util.TempDir(r.rootFilesystem, ".", "repo_")
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create temporary directory")
 	}
 
 	r.filesystem, err = r.rootFilesystem.Chroot(tempDir)
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("failed to change directory to %s", tempDir))
 	}
 
 	storageWorkTree, err := r.filesystem.Chroot(".git")
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to change directory to .git")
 	}
 
-	fmt.Printf("Cloning " + url)
 	// Pass a defafult LRU object cache, as per git.PlainClone's implementation
 	r.repo, err = r.git.Clone(
 		filesystem.NewStorage(storageWorkTree, cache.NewObjectLRUDefault()),
@@ -66,7 +66,7 @@ func (r *Repo) Clone(creds Credentials) error {
 			Auth:  &auth})
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to clone remote repository")
 	}
 
 	return nil
@@ -74,5 +74,8 @@ func (r *Repo) Clone(creds Credentials) error {
 
 func (r *Repo) Close() error {
 	err := util.RemoveAll(r.filesystem, ".")
-	return err
+	if err != nil {
+		return errors.Wrap(err, "failed to clean up temporary directory")
+	}
+	return nil
 }
