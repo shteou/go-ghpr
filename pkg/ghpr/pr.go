@@ -2,12 +2,12 @@ package ghpr
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/go-github/github"
 	"github.com/jpillora/backoff"
+	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
 
@@ -46,13 +46,13 @@ func (p *PR) Create(targetBranch string, title string, body string) error {
 			Base:  &targetBranch,
 			Body:  &body})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create PR")
 	}
 
 	p.Number = *pr.Number
 	p.PRSha = *pr.Head.SHA
 
-	return err
+	return nil
 }
 
 func (p *PR) URL() (string, error) {
@@ -83,7 +83,7 @@ func (p *PR) waitForStatus(shaRef string, strategy StatusWaitStrategy, c chan er
 			shaRef, &github.ListOptions{PerPage: 20})
 
 		if err != nil {
-			c <- err
+			c <- errors.Wrap(err, fmt.Sprintf("failed listing statuses while waiting for %s", shaRef))
 			return
 		}
 
@@ -98,7 +98,7 @@ func (p *PR) waitForStatus(shaRef string, strategy StatusWaitStrategy, c chan er
 				return
 			}
 			if s.GetState() == "failure" || s.GetState() == "error" {
-				c <- errors.New("target status check is in a failed state, aborting")
+				c <- errors.Wrap(err, "target status check is in a failed state, aborting")
 				return
 			}
 		}
@@ -137,14 +137,14 @@ func (p *PR) WaitForMergeStatus(strategy StatusWaitStrategy) error {
 func (p *PR) Merge(mergeMethod string) error {
 	pr, err := p.GetGithubPR()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to retrieve GitHub PR")
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
 		merge, _, err := p.ghClient.PullRequests.Merge(context.TODO(),
 			p.change.repo.Org, p.change.repo.Name, *pr.Number, "", &github.PullRequestOptions{MergeMethod: mergeMethod})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failedd to merge PR")
 		}
 		p.MergedSha = *merge.SHA
 	} else {
