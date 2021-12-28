@@ -32,8 +32,6 @@ type StatusWaitStrategy struct {
 	MaxPollTime time.Duration
 	// The poll time will be multiplied by this (up to max)
 	PollBackoffFactor float32
-	// The total timeout for the wait operation
-	Timeout time.Duration
 	// WaitStatusContext indicates the name of the status check to wait for
 	WaitStatusContext string
 }

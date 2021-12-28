@@ -61,20 +61,23 @@ func PushDockerfileDeletionBranch(owner string, name string) error {
 		return err
 	}
 
-	pr := ghpr.NewPR(change, creds)
-	pr.Create("master", "chore: make change", "")
+	timeout, cancel := context.WithTimeout(context.Background(), time.Duration(time.Second*30))
+	defer cancel()
 
-	err = pr.WaitForPRStatus(strategy)
+	pr := ghpr.NewPR(timeout, change, creds)
+	pr.Create(timeout, "master", "chore: make change", "")
+
+	err = pr.WaitForPRStatus(timeout, strategy)
 	if err != nil {
 		return err
 	}
 
-	err = pr.Merge("merge")
+	err = pr.Merge(timeout, "merge")
 	if err != nil {
 		return err
 	}
 
-	return pr.WaitForMergeStatus(strategy)
+	return pr.WaitForMergeStatus(timeout, strategy)
 }
 
 func main() {
