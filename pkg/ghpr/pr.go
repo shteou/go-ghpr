@@ -19,11 +19,13 @@ type PR struct {
 	MergedSha string
 }
 
-func NewPR(change Change, creds Credentials) PR {
+// NewPR creates a new PR object. The supplied context may be used
+// over the course of the PR object's lifetime
+func NewPR(ctx context.Context, change Change, creds Credentials) PR {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: creds.Token},
 	)
-	tc := oauth2.NewClient(context.TODO(), ts)
+	tc := oauth2.NewClient(ctx, ts)
 
 	client := github.NewClient(tc)
 
@@ -37,8 +39,9 @@ func newPR(change Change, client *github.Client) PR {
 	}
 }
 
-func (p *PR) Create(targetBranch string, title string, body string) error {
-	pr, _, err := p.ghClient.PullRequests.Create(context.TODO(),
+// Create a PR in Github from the Change's source branch to the supplied target branch
+func (p *PR) Create(ctx context.Context, targetBranch string, title string, body string) error {
+	pr, _, err := p.ghClient.PullRequests.Create(ctx,
 		p.change.repo.Org, p.change.repo.Name,
 		&github.NewPullRequest{
 			Title: &title,
@@ -55,20 +58,7 @@ func (p *PR) Create(targetBranch string, title string, body string) error {
 	return nil
 }
 
-func (p *PR) URL() (string, error) {
-	if p.Number == 0 {
-		return "", errors.New("pull request doesn't have a valid PR number (was PR creation successful?)")
-	}
-
-	return fmt.Sprintf("https://github.com/%s/%s/pull/%d", p.change.repo.Org, p.change.repo.Name, p.Number), nil
-}
-
-func (p *PR) GetGithubPR() (*github.PullRequest, error) {
-	pr, _, err := p.ghClient.PullRequests.Get(context.TODO(), p.change.repo.Org, p.change.repo.Name, p.Number)
-	return pr, err
-}
-
-func (p *PR) waitForStatus(shaRef string, strategy StatusWaitStrategy, c chan error) {
+func (p *PR) waitForStatus(ctx context.Context, shaRef string, strategy StatusWaitStrategy) error {
 	b := &backoff.Backoff{
 		Min:    strategy.MinPollTime,
 		Max:    strategy.MaxPollTime,
@@ -77,14 +67,12 @@ func (p *PR) waitForStatus(shaRef string, strategy StatusWaitStrategy, c chan er
 	}
 
 	for {
-		fmt.Printf("Waiting for %s to become mergeable\n", shaRef)
-		statuses, _, err := p.ghClient.Repositories.ListStatuses(context.TODO(),
+		statuses, _, err := p.ghClient.Repositories.ListStatuses(ctx,
 			p.change.repo.Org, p.change.repo.Name,
 			shaRef, &github.ListOptions{PerPage: 20})
 
 		if err != nil {
-			c <- errors.Wrap(err, fmt.Sprintf("failed listing statuses while waiting for %s", shaRef))
-			return
+			return errors.Wrap(err, fmt.Sprintf("failed listing statuses while waiting for %s", shaRef))
 		}
 
 		for i := 0; i < len(statuses); i++ {
@@ -94,54 +82,38 @@ func (p *PR) waitForStatus(shaRef string, strategy StatusWaitStrategy, c chan er
 			}
 
 			if s.GetState() == "success" {
-				c <- nil
-				return
+				return nil
 			}
 			if s.GetState() == "failure" || s.GetState() == "error" {
-				c <- errors.Wrap(err, "target status check is in a failed state, aborting")
-				return
+				return errors.Wrap(err, "target status check is in a failed state, aborting")
 			}
 		}
-		time.Sleep(b.Duration())
+		select {
+		case <-ctx.Done():
+			return errors.New("timed out waiting for status")
+		case <-time.After(b.Duration()):
+		}
 	}
 }
 
-func (p *PR) WaitForPRStatus(strategy StatusWaitStrategy) error {
-	c := make(chan error, 10)
-	go func() {
-		p.waitForStatus(p.PRSha, strategy, c)
-	}()
-
-	select {
-	case err := <-c:
-		return err
-	case <-time.After(strategy.Timeout):
-		return errors.New("timed out waiting for PR to become mergeable")
-	}
+// WaitForPRStatus polls for a status with exponential backoff, as defined
+// by the StatusWaitStrategy parameter.
+func (p *PR) WaitForPRStatus(ctx context.Context, strategy StatusWaitStrategy) error {
+	return p.waitForStatus(ctx, p.PRSha, strategy)
 }
 
-func (p *PR) WaitForMergeStatus(strategy StatusWaitStrategy) error {
-	c := make(chan error, 10)
-	go func() {
-		p.waitForStatus(p.MergedSha, strategy, c)
-	}()
-
-	select {
-	case err := <-c:
-		return err
-	case <-time.After(strategy.Timeout):
-		return errors.New("timed out waiting for PR to become mergeable")
-	}
+func (p *PR) WaitForMergeStatus(ctx context.Context, strategy StatusWaitStrategy) error {
+	return p.waitForStatus(ctx, p.MergedSha, strategy)
 }
 
-func (p *PR) Merge(mergeMethod string) error {
-	pr, err := p.GetGithubPR()
+func (p *PR) Merge(ctx context.Context, mergeMethod string) error {
+	pr, err := p.GetGithubPR(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to retrieve GitHub PR")
 	}
 
 	if pr.Mergeable != nil && *pr.Mergeable {
-		merge, _, err := p.ghClient.PullRequests.Merge(context.TODO(),
+		merge, _, err := p.ghClient.PullRequests.Merge(ctx,
 			p.change.repo.Org, p.change.repo.Name, *pr.Number, "", &github.PullRequestOptions{MergeMethod: mergeMethod})
 		if err != nil {
 			return errors.Wrap(err, "failedd to merge PR")
@@ -151,4 +123,19 @@ func (p *PR) Merge(mergeMethod string) error {
 		return errors.New("PR is not mergeable")
 	}
 	return nil
+}
+
+// GetGithubPR feches the Github
+func (p *PR) GetGithubPR(ctx context.Context) (*github.PullRequest, error) {
+	pr, _, err := p.ghClient.PullRequests.Get(ctx, p.change.repo.Org, p.change.repo.Name, p.Number)
+	return pr, err
+}
+
+// Fetch a URL for the GitHub PR without any additional calls to GitHub
+func (p *PR) URL() (string, error) {
+	if p.Number == 0 {
+		return "", errors.New("pull request doesn't have a valid PR number (was PR creation successful?)")
+	}
+
+	return fmt.Sprintf("https://github.com/%s/%s/pull/%d", p.change.repo.Org, p.change.repo.Name, p.Number), nil
 }
