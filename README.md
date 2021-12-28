@@ -48,7 +48,6 @@ func PushDockerfileDeletionBranch(owner string, name string) error {
 		MinPollTime:       time.Second * 20,
 		MaxPollTime:       time.Second * 60,
 		PollBackoffFactor: 1.05,
-		Timeout:           time.Minute * 10,
 		WaitStatusContext: "Semantic Pull Request",
 	}
 
