@@ -17,6 +17,7 @@ type Change struct {
 	creds      Credentials
 }
 
+// NewChange creates a new Change object with the supplied parameters
 func NewChange(repo Repo, branch string, creds Credentials, fn UpdateFunc) Change {
 	return Change{
 		Branch:     branch,
@@ -26,6 +27,8 @@ func NewChange(repo Repo, branch string, creds Credentials, fn UpdateFunc) Chang
 	}
 }
 
+// Push the change to the remote repository. First applies your update function
+// to the supplied branch and pushes to a remote branch of the same name
 func (c *Change) Push() error {
 	headRef, err := c.repo.repo.Head()
 	if err != nil {

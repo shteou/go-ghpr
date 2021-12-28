@@ -14,30 +14,24 @@ import (
 )
 
 type Repo struct {
-	Name           string
-	Org            string
+	Name  string
+	Owner string
+	// The root filesystem in which a temporary filesystem will be created
 	rootFilesystem billy.Filesystem
-	filesystem     billy.Filesystem
-	git            goGit
-	repo           *git.Repository
+	// the temporary filesystem which houses the repository
+	filesystem billy.Filesystem
+	git        goGit
+	repo       *git.Repository
 }
 
-func NewRepo(org string, name string) Repo {
-	return newRepo(org, name, osfs.New("."), realGoGit{})
+// NewRepo creates a new Repo object with the supplied parameters
+func NewRepo(owner string, name string) Repo {
+	return newRepo(owner, name, osfs.New("."), realGoGit{})
 }
 
-func newRepo(org string, name string, fs billy.Filesystem, git goGit) Repo {
-	return Repo{
-		Name:           name,
-		Org:            org,
-		rootFilesystem: fs,
-		filesystem:     nil,
-		git:            git,
-	}
-}
-
+// Clone the remote repository to a temporary directory
 func (r *Repo) Clone(creds Credentials) error {
-	url := fmt.Sprintf("https://github.com/" + r.Org + "/" + r.Name)
+	url := fmt.Sprintf("https://github.com/" + r.Owner + "/" + r.Name)
 
 	auth := http.BasicAuth{Username: creds.Username, Password: creds.Token}
 
@@ -72,10 +66,21 @@ func (r *Repo) Clone(creds Credentials) error {
 	return nil
 }
 
+// Close removes the contents of the temporary directory
 func (r *Repo) Close() error {
 	err := util.RemoveAll(r.filesystem, ".")
 	if err != nil {
 		return errors.Wrap(err, "failed to clean up temporary directory")
 	}
 	return nil
+}
+
+func newRepo(owner string, name string, fs billy.Filesystem, git goGit) Repo {
+	return Repo{
+		Name:           name,
+		Owner:          owner,
+		rootFilesystem: fs,
+		filesystem:     nil,
+		git:            git,
+	}
 }
