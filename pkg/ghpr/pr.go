@@ -77,15 +77,16 @@ func (p *PR) Merge(ctx context.Context, mergeMethod string) error {
 	return nil
 }
 
-// WaitForPRStatus polls for a status with exponential backoff, as defined
-// by the StatusWaitStrategy parameter.
-func (p *PR) WaitForPRStatus(ctx context.Context, strategy StatusWaitStrategy) error {
-	return p.waitForStatus(ctx, p.PRSha, strategy)
+// WaitForPRChecks polls for GitHub action/status results on a given PR (the HEAD of the source branch)
+// with exponential backoff
+func (p *PR) WaitForPRChecks(ctx context.Context, checks []Check, backoffStrategy BackoffStrategy) error {
+	return p.waitForChecks(ctx, p.PRSha, checks, backoffStrategy)
 }
 
-// WaitForMergeStatus polls for a status on the merge commit (to your target branch).
-func (p *PR) WaitForMergeStatus(ctx context.Context, strategy StatusWaitStrategy) error {
-	return p.waitForStatus(ctx, p.MergedSha, strategy)
+// WaitForMergeChecks polls for GitHub action/status results on the merged commit of a PR (a reference on
+// the target branch) with exponential backoff
+func (p *PR) WaitForMergeChecks(ctx context.Context, checks []Check, backoffStrategy BackoffStrategy) error {
+	return p.waitForChecks(ctx, p.MergedSha, checks, backoffStrategy)
 }
 
 // URL fetches the URL for the GitHub PR without any additional calls to GitHub
@@ -105,12 +106,42 @@ func newPR(change Change, client *github.Client) PR {
 	}
 }
 
-func (p *PR) waitForStatus(ctx context.Context, shaRef string, strategy StatusWaitStrategy) error {
+func statusSuccessful(targetStatus string, statuses []*github.RepoStatus) (string, error) {
+	for _, status := range statuses {
+		context := status.GetContext()
+
+		if context != targetStatus {
+			continue
+		}
+
+		return status.GetState(), nil
+	}
+
+	return "", errors.New("Could not find target context in commit status list")
+}
+
+func (p *PR) waitForChecks(ctx context.Context, shaRef string, checks []Check, backoffStrategy BackoffStrategy) error {
 	b := &backoff.Backoff{
-		Min:    strategy.MinPollTime,
-		Max:    strategy.MaxPollTime,
-		Factor: float64(strategy.PollBackoffFactor),
+		Min:    backoffStrategy.MinPollTime,
+		Max:    backoffStrategy.MaxPollTime,
+		Factor: float64(backoffStrategy.PollBackoffFactor),
 		Jitter: true,
+	}
+
+	targetStatuses := []string{}
+	targetActions := []string{}
+	for _, check := range checks {
+		if check.CheckType == "status" {
+			targetStatuses = append(targetStatuses, check.Name)
+		} else if check.CheckType == "action" {
+			targetActions = append(targetActions, check.Name)
+		} else {
+			return errors.New("Unknown check type, must be one of 'action' or 'status'")
+		}
+	}
+
+	if len(targetActions) > 0 {
+		return errors.New("Unsupported check type, check not yet implemented")
 	}
 
 	for {
@@ -122,19 +153,26 @@ func (p *PR) waitForStatus(ctx context.Context, shaRef string, strategy StatusWa
 			return errors.Wrap(err, fmt.Sprintf("failed listing statuses while waiting for %s", shaRef))
 		}
 
-		for i := 0; i < len(statuses); i++ {
-			s := statuses[i]
-			if s.GetContext() != strategy.WaitStatusContext {
-				continue
+		statusesSuccessful := 0
+		for _, status := range targetStatuses {
+			result, err := statusSuccessful(status, statuses)
+			if err != nil {
+				// If a status is not found yet, wait for next poll
+				break
 			}
 
-			if s.GetState() == "success" {
-				return nil
-			}
-			if s.GetState() == "failure" || s.GetState() == "error" {
-				return errors.Wrap(err, "target status check is in a failed state, aborting")
+			if result == "success" {
+				statusesSuccessful += 1
+				continue
+			} else if result == "failure" || result == "error" {
+				return fmt.Errorf("target status check (%s) is in a failed state, aborting", status)
 			}
 		}
+
+		if statusesSuccessful == len(targetStatuses) {
+			return nil
+		}
+
 		select {
 		case <-ctx.Done():
 			return errors.New("timed out waiting for status")

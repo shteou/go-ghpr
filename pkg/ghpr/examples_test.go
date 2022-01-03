@@ -68,22 +68,19 @@ func ExamplePR_WaitForPRStatus() {
 	pr, _ := basicPR()
 	_ = pr.Create(context.Background(), "main", "chore: remove obsolete files", "")
 
-	strategy := ghpr.StatusWaitStrategy{
+	strategy := ghpr.BackoffStrategy{
 		MinPollTime:       10 * time.Second,
 		MaxPollTime:       60 * time.Second,
 		PollBackoffFactor: 1.05,
-		WaitStatusContext: "Semantic Pull Request",
 	}
-	_ = pr.WaitForPRStatus(context.Background(), strategy)
+	statusChecks := []ghpr.Check{{Name: "Semantic Pull Request", CheckType: "status"}}
+
+	_ = pr.WaitForPRChecks(context.Background(), statusChecks, strategy)
 }
 
 func ExamplePR_Merge() {
 	pr, _ := basicPR()
 	_ = pr.Create(context.Background(), "main", "chore: remove obsolete files", "")
-
-	strategy := ghpr.StatusWaitStrategy{MinPollTime: 10 * time.Second, MaxPollTime: 60 * time.Second, PollBackoffFactor: 1.05, WaitStatusContext: "Semantic Pull Request"}
-	_ = pr.WaitForPRStatus(context.Background(), strategy)
-
 	_ = pr.Merge(context.Background(), "squash")
 }
 
@@ -91,9 +88,10 @@ func ExamplePR_WaitForMergeStatus() {
 	pr, _ := basicPR()
 	_ = pr.Create(context.Background(), "main", "chore: remove obsolete files", "")
 
-	strategy := ghpr.StatusWaitStrategy{MinPollTime: 10 * time.Second, MaxPollTime: 60 * time.Second, PollBackoffFactor: 1.05, WaitStatusContext: "Semantic Pull Request"}
-	_ = pr.WaitForPRStatus(context.Background(), strategy)
+	strategy := ghpr.BackoffStrategy{MinPollTime: 10 * time.Second, MaxPollTime: 60 * time.Second, PollBackoffFactor: 1.05}
+	statusChecks := []ghpr.Check{{Name: "Semantic Pull Request", CheckType: "status"}}
+	_ = pr.WaitForPRChecks(context.Background(), statusChecks, strategy)
 	_ = pr.Merge(context.Background(), "squash")
 
-	_ = pr.WaitForMergeStatus(context.Background(), strategy)
+	_ = pr.WaitForMergeChecks(context.Background(), statusChecks, strategy)
 }
