@@ -24,14 +24,20 @@ type Author struct {
 	Email string
 }
 
-// StatusWaitStrategy describes how to wait for a GitHub status check
-type StatusWaitStrategy struct {
+// BackoffStrategy provides describes how to wait for a GitHub status check
+type BackoffStrategy struct {
 	// The initial wait time
 	MinPollTime time.Duration
 	// The max wait time when polling for a status
 	MaxPollTime time.Duration
 	// The poll time will be multiplied by this (up to max)
 	PollBackoffFactor float32
-	// WaitStatusContext indicates the name of the status check to wait for
-	WaitStatusContext string
+}
+
+// Check represents a GitHub action result or status
+type Check struct {
+	// Name of the check, e.g. "Semantic Pull Request"
+	Name string
+	// CheckType the type of check, either "action" or "status"
+	CheckType string
 }

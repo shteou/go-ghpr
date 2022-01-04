@@ -1,28 +1,18 @@
 # go-ghpr (GitHub PRs)
 
-`go-ghpr` is a simple wrapper around Git and GitHub which helps to automate making changes
-to GitHub repositories via Pull Request.
+`go-ghpr` is a simple wrapper around Git and GitHub which helps to automate programmatic
+changes to GitHub repositories via Pull Requests.
 
+## Supported workflows
 
-## Features
+`go-ghpr` will make a shallow clone of the remote repository and supports
+making a single commit to a local branch. That can then be pushed remotely
+to a branch of the same name, and a PR may be raised from that branch to another.
 
-* Shallow clone a remote repository
-* Make a commit to a new branch in the repository, and push that branch to the remote origin
-* Raise a PR for a source/target branch
-* Wait for the PR to become mergeable and merge it
-* Wait for a status on the merged commit
-* Cleanup the repository
+`gh-ghpr` then supports waiting for conditions on that PR (e.g. waiting for it to become
+mergeable or to have a passing status check), merging the PR, and again waiting
 
-### Planned features
-
-* A more extensible API which still abstracts some Git/GitHub plumbing  
-  The current API is very tailored to a single use case of making a single change,
-  raising a PR, and merging that PR
-* Add more strategies for waiting for on PR status  
-  e.g. waiting for classic status checks and those from GitHub actions or
-  waiting on all status checks / mergeable status
-* Support for different merge strategies (and identifying which commits to
-  wait for statuses on)
+Most of these steps are optional, so a wide range of workflows can be accomodated.
 
 ## Usage
 
@@ -44,12 +34,12 @@ func PushDockerfileDeletionBranch(owner string, name string) error {
 		return err
 	}
 
-	strategy := ghpr.StatusWaitStrategy{
+	strategy := ghpr.BackoffStrategy{
 		MinPollTime:       time.Second * 20,
 		MaxPollTime:       time.Second * 60,
 		PollBackoffFactor: 1.05,
-		WaitStatusContext: "Semantic Pull Request",
 	}
+	statusChecks := []ghpr.Check{{Name: "Semantic Pull Request", CheckType: "status"}}
 
 	change := ghpr.NewChange(repo, "chore-make-change", creds, func(w *git.Worktree) (string, *object.Signature, error) {
 		return UpdateRequirements(service, version, w)
@@ -66,7 +56,7 @@ func PushDockerfileDeletionBranch(owner string, name string) error {
 	pr := ghpr.NewPR(timeout, change, creds)
 	pr.Create(timeout, "master", "chore: make change", "")
 
-	err = pr.WaitForPRStatus(timeout, strategy)
+	err = pr.WaitForPRChecks(timeout, statusChecks, strategy)
 	if err != nil {
 		return err
 	}
@@ -76,7 +66,7 @@ func PushDockerfileDeletionBranch(owner string, name string) error {
 		return err
 	}
 
-	return pr.WaitForMergeStatus(timeout, strategy)
+	return pr.WaitForMergeChecks(timeout, statusChecks, strategy)
 }
 
 func main() {
