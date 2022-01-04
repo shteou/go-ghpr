@@ -77,16 +77,44 @@ func (p *PR) Merge(ctx context.Context, mergeMethod string) error {
 	return nil
 }
 
+// WaitForMergeChecks polls for GitHub action/status results on the merged commit of a PR (a reference on
+// the target branch) with exponential backoff
+func (p *PR) WaitForMergeChecks(ctx context.Context, checks []Check, backoffStrategy BackoffStrategy) error {
+	return p.waitForChecks(ctx, p.MergedSha, checks, backoffStrategy)
+}
+
 // WaitForPRChecks polls for GitHub action/status results on a given PR (the HEAD of the source branch)
 // with exponential backoff
 func (p *PR) WaitForPRChecks(ctx context.Context, checks []Check, backoffStrategy BackoffStrategy) error {
 	return p.waitForChecks(ctx, p.PRSha, checks, backoffStrategy)
 }
 
-// WaitForMergeChecks polls for GitHub action/status results on the merged commit of a PR (a reference on
-// the target branch) with exponential backoff
-func (p *PR) WaitForMergeChecks(ctx context.Context, checks []Check, backoffStrategy BackoffStrategy) error {
-	return p.waitForChecks(ctx, p.MergedSha, checks, backoffStrategy)
+// WaitForPRMergeable polls for the GitHub PR to be marked as mergeable with exponential
+// backoff
+func (p *PR) WaitForPRMergeable(ctx context.Context, backoffStrategy BackoffStrategy) error {
+	b := &backoff.Backoff{
+		Min:    backoffStrategy.MinPollTime,
+		Max:    backoffStrategy.MaxPollTime,
+		Factor: float64(backoffStrategy.PollBackoffFactor),
+		Jitter: true,
+	}
+
+	for {
+		pr, err := p.GetGithubPR(ctx)
+		if err != nil {
+			return err
+		}
+
+		if *pr.Mergeable {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return errors.New("timed out waiting for PR to be mergeable")
+		case <-time.After(b.Duration()):
+		}
+	}
 }
 
 // URL fetches the URL for the GitHub PR without any additional calls to GitHub

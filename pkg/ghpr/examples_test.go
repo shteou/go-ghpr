@@ -78,6 +78,13 @@ func ExamplePR_WaitForPRStatus() {
 	_ = pr.WaitForPRChecks(context.Background(), statusChecks, strategy)
 }
 
+func ExamplePR_WaitForMergeable() {
+	pr, _ := basicPR()
+	_ = pr.Create(context.Background(), "main", "chore: remove obsolete files", "")
+	strategy := ghpr.BackoffStrategy{MinPollTime: 10 * time.Second, MaxPollTime: 60 * time.Second, PollBackoffFactor: 1.05}
+	pr.WaitForPRMergeable(context.Background(), strategy)
+}
+
 func ExamplePR_Merge() {
 	pr, _ := basicPR()
 	_ = pr.Create(context.Background(), "main", "chore: remove obsolete files", "")
