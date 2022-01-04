@@ -1,7 +1,6 @@
 package ghpr
 
 import (
-	"context"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -12,8 +11,6 @@ import (
 // to the git WorkTree. These changes will be automatically committed on successful
 // return by the PushCommit function
 type UpdateFunc func(w *git.Worktree) (string, *object.Signature, error)
-
-type WaitFunc func(ctx context.Context, p PR) error
 
 // Credentials represents a GitHub username and PAT
 type Credentials struct {
